@@ -1,209 +1,162 @@
-= Elasticsearch
+idea编译参考文章：[教你编译调试Elasticsearch 6.3.2源码-腾讯云开发者社区-腾讯云](https://cloud.tencent.com/developer/article/1385924)
 
-== A Distributed RESTful Search Engine
+源码分析参考文章：
 
-=== https://www.elastic.co/products/elasticsearch[https://www.elastic.co/products/elasticsearch]
+* [【Elasticsearch源码】查询源码分析](https://blog.csdn.net/wudingmei1023/article/details/103968625)
+* [lucene源码分析](https://www.6aiq.com/member/Emma?p=2)
+* [SpanQuery源码学习总结](https://cloud.tencent.com/developer/article/1936235)
+* [SpanNearQuery（一）](https://blog.csdn.net/iteye_14612/article/details/82677774)
+* [SpanQuery跨度查询](https://developer.aliyun.com/article/45341)
+* [PhraseQuery 的 slop 的理解](https://my.oschina.net/wangguolongnk/blog/107690)
+* [lucene的使用](https://blog.csdn.net/z_ssyy/article/details/105234446)
+* [lucene索引结构](https://zhuanlan.zhihu.com/p/443722667)
+* [倒排表存储](https://juejin.cn/post/7123923721881911304)
+* [lucene源码系列](https://www.6aiq.com/member/Emma?p=1)
+* [书籍](https://github.com/reburning/book/blob/master/%E6%8E%A8%E8%8D%90%E7%B3%BB%E7%BB%9F%E5%AE%9E%E8%B7%B5.pdf)
+* [lucene搜索过程分析(重点看)](https://cloud.tencent.com/developer/article/1163393)
 
-Elasticsearch is a distributed RESTful search engine built for the cloud. Features include:
+# 必要条件：
 
-* Distributed and Highly Available Search Engine.
-** Each index is fully sharded with a configurable number of shards.
-** Each shard can have one or more replicas.
-** Read / Search operations performed on any of the replica shards.
-* Multi Tenant.
-** Support for more than one index.
-** Index level configuration (number of shards, index storage, ...).
-* Various set of APIs
-** HTTP RESTful API
-** All APIs perform automatic node operation rerouting.
-* Document oriented
-** No need for upfront schema definition.
-** Schema can be defined for customization of the indexing process.
-* Reliable, Asynchronous Write Behind for long term persistency.
-* (Near) Real Time Search.
-* Built on top of Apache Lucene
-** Each shard is a fully functional Lucene index
-** All the power of Lucene easily exposed through simple configuration / plugins.
-* Per operation consistency
-** Single document level operations are atomic, consistent, isolated and durable.
+- VPN（可避免很多奇怪的问题）
+- JDK版本：（必须）[13.0.2](https://www.oracle.com/java/technologies/javase/jdk13-archive-downloads.html)
+- gradle 6.1.1  可以由编译时自动下载（可选）
 
-== Getting Started
+## 本地环境部署：
 
-First of all, DON'T PANIC. It will take 5 minutes to get the gist of what Elasticsearch is all about.
+### JDK13.0.2安装：
 
-=== Installation
+本次安装的是：jdk-13.0.2_windows-x64_bin.zip（绿色版）
 
-* https://www.elastic.co/downloads/elasticsearch[Download] and unpack the Elasticsearch official distribution.
-* Run `bin/elasticsearch` on Linux or macOS. Run `bin\elasticsearch.bat` on Windows.
-* Run `curl -X GET http://localhost:9200/`.
-* Start more servers ...
+由于我本机先安装了jdk8，后面才安装jdk13，会导致cmd 上执行java -version显示的是：jdk13。
 
-=== Indexing
+处理方式：系统环境变量 》path》会看到以下配置，一个是jdk13，另一个是jdk，屏蔽其中一个即可来回切换不同的JDK版本！！！
 
-Let's try and index some twitter like information. First, let's index some tweets (the `twitter` index will be created automatically):
+C:\Program Files (x86)\Common Files\Oracle\Java\javapath
 
-----
-curl -XPUT 'http://localhost:9200/twitter/_doc/1?pretty' -H 'Content-Type: application/json' -d '
-{
-    "user": "kimchy",
-    "post_date": "2009-11-15T13:12:00",
-    "message": "Trying out Elasticsearch, so far so good?"
-}'
+C:\ProgramData\Oracle\Java\javapath
 
-curl -XPUT 'http://localhost:9200/twitter/_doc/2?pretty' -H 'Content-Type: application/json' -d '
-{
-    "user": "kimchy",
-    "post_date": "2009-11-15T14:12:12",
-    "message": "Another tweet, will it be indexed?"
-}'
+（注）：建议以上两个目录都删除或！！！[因为以上两个目录是自动配置java环境程序配置](https://baijiahao.baidu.com/s?id=1663285105466706416&wfr=spider&for=pc)的。。。
 
-curl -XPUT 'http://localhost:9200/twitter/_doc/3?pretty' -H 'Content-Type: application/json' -d '
-{
-    "user": "elastic",
-    "post_date": "2010-01-15T01:46:38",
-    "message": "Building the site, should be kewl"
-}'
-----
+（注）：elasticsearch-7.6.0要求必须是：JDK13，即保证当前环境是JDK10。
 
-Now, let's see if the information was added by GETting it:
+#### 环境变量
 
-----
-curl -XGET 'http://localhost:9200/twitter/_doc/1?pretty=true'
-curl -XGET 'http://localhost:9200/twitter/_doc/2?pretty=true'
-curl -XGET 'http://localhost:9200/twitter/_doc/3?pretty=true'
-----
+elasticsearch-7.6.0要求JAVA_HOME必须指向JDK13。。。
 
-=== Searching
+即java -version执行结果必须是jdk13
 
-Mmm search..., shouldn't it be elastic?
-Let's find all the tweets that `kimchy` posted:
+### 下载代码
 
-----
-curl -XGET 'http://localhost:9200/twitter/_search?q=user:kimchy&pretty=true'
-----
+版本号：elasticsearch-7.6.0
 
-We can also use the JSON query language Elasticsearch provides instead of a query string:
+下载源码： https://github.com/elastic/elasticsearch/releases?page=11
 
-----
-curl -XGET 'http://localhost:9200/twitter/_search?pretty=true' -H 'Content-Type: application/json' -d '
-{
-    "query" : {
-        "match" : { "user": "kimchy" }
+下载发行版： https://www.elastic.co/cn/downloads/past-releases/elasticsearch-7-6-0
+
+### 复制插件：
+
+在elasticsearch-7.6.0源码根目录下创建home目录。
+
+将发行版中的modules 复制到 源码中home目录
+
+将发行版中的config 复制到 源码中home目录
+
+home目录案例：
+
+G:\github\elasticsearch-7.6.0\home
+
+### 配置文件
+
+在 `home/config` 目录下新建 `java.policy` 文件，填入下面内容
+
+```
+grant {
+ permission java.lang.RuntimePermission "createClassLoader";
+};
+```
+
+### 源码Maven仓库地址
+
+需要修改下列文件的 maven URL 配置：
+
+- elasticsearch\build.gradle
+
+```
+allprojects {
+  ....
+  新增代码
+  repositories {
+    maven {
+      url 'http://maven.aliyun.com/nexus/content/groups/public/'
     }
-}'
-----
+  }
 
-Just for kicks, let's get all the documents stored (we should see the tweet from `elastic` as well):
+}
+```
 
-----
-curl -XGET 'http://localhost:9200/twitter/_search?pretty=true' -H 'Content-Type: application/json' -d '
-{
-    "query" : {
-        "match_all" : {}
-    }
-}'
-----
+- elasticsearch-7.6.0\benchmarks\build.gradle
+- elasticsearch-7.6.0\client\benchmark\build.gradle
 
-We can also do range search (the `post_date` was automatically identified as date)
-
-----
-curl -XGET 'http://localhost:9200/twitter/_search?pretty=true' -H 'Content-Type: application/json' -d '
-{
-    "query" : {
-        "range" : {
-            "post_date" : { "from" : "2009-11-15T13:00:00", "to" : "2009-11-15T14:00:00" }
+```
+buildscript {
+    repositories {
+        maven {
+            url 'http://maven.aliyun.com/nexus/content/groups/public/'
         }
     }
-}'
-----
-
-There are many more options to perform search, after all, it's a search product no? All the familiar Lucene queries are available through the JSON query language, or through the query parser.
-
-=== Multi Tenant - Indices
-
-Man, that twitter index might get big (in this case, index size == valuation). Let's see if we can structure our twitter system a bit differently in order to support such large amounts of data.
-
-Elasticsearch supports multiple indices. In the previous example we used an index called `twitter` that stored tweets for every user.
-
-Another way to define our simple twitter system is to have a different index per user (note, though that each index has an overhead). Here is the indexing curl's in this case:
-
-----
-curl -XPUT 'http://localhost:9200/kimchy/_doc/1?pretty' -H 'Content-Type: application/json' -d '
-{
-    "user": "kimchy",
-    "post_date": "2009-11-15T13:12:00",
-    "message": "Trying out Elasticsearch, so far so good?"
-}'
-
-curl -XPUT 'http://localhost:9200/kimchy/_doc/2?pretty' -H 'Content-Type: application/json' -d '
-{
-    "user": "kimchy",
-    "post_date": "2009-11-15T14:12:12",
-    "message": "Another tweet, will it be indexed?"
-}'
-----
-
-The above will index information into the `kimchy` index. Each user will get their own special index.
-
-Complete control on the index level is allowed. As an example, in the above case, we might want to change from the default 1 shards with 1 replica per index, to 2 shards with 1 replica per index (because this user tweets a lot). Here is how this can be done (the configuration can be in yaml as well):
-
-----
-curl -XPUT http://localhost:9200/another_user?pretty -H 'Content-Type: application/json' -d '
-{
-    "settings" : {
-        "index.number_of_shards" : 2,
-        "index.number_of_replicas" : 1
+    dependencies {
+        classpath 'com.github.jengelman.gradle.plugins:shadow:2.0.2'
     }
-}'
-----
+}
+```
 
-Search (and similar operations) are multi index aware. This means that we can easily search on more than one
-index (twitter user), for example:
+### gradle编译
 
-----
-curl -XGET 'http://localhost:9200/kimchy,another_user/_search?pretty=true' -H 'Content-Type: application/json' -d '
-{
-    "query" : {
-        "match_all" : {}
-    }
-}'
-----
+在elasticsearch-7.6.0源码根目录下执行：gradlew.bat idea
 
-Or on all the indices:
+#### 问题：
 
-----
-curl -XGET 'http://localhost:9200/_search?pretty=true' -H 'Content-Type: application/json' -d '
-{
-    "query" : {
-        "match_all" : {}
-    }
-}'
-----
+基本会报插件找不到，如hadoop不存在。终极方法，将hadoop_home系统变量暂时去掉。
 
-And the cool part about that? You can easily search on multiple twitter users (indices), with different boost levels per user (index), making social search so much simpler (results from my friends rank higher than results from friends of my friends).
+### 导入idea
 
-=== Distributed, Highly Available
+#### 配置项目JDK
 
-Let's face it, things will fail....
+选中项目》Project Structure》Project页面》SDK》选JDK10，即可。。。
 
-Elasticsearch is a highly available and distributed search engine. Each index is broken down into shards, and each shard can have one or more replicas. By default, an index is created with 1 shard and 1 replica per shard (1/1). There are many topologies that can be used, including 1/10 (improve search performance), or 20/1 (improve indexing performance, with search executed in a map reduce fashion across shards).
+#### 配置gradle路径:
 
-In order to play with the distributed nature of Elasticsearch, simply bring more nodes up and shut down nodes. The system will continue to serve requests (make sure you use the correct http port) with the latest data indexed.
+导入idea后，配置gradle的路径在 elasticsearch-7.6.0源码中的gradle路径：G:/qzd/JavaProject/QZD_GROUP/openSource/elasticsearch-7.6.0/gradle ！！！
 
-=== Where to go from here?
+不配置的话，默认会下载到用户目录 ！！！
 
-We have just covered a very small portion of what Elasticsearch is all about. For more information, please refer to the http://www.elastic.co/products/elasticsearch[elastic.co] website. General questions can be asked on the https://discuss.elastic.co[Elastic Forum] or https://ela.st/slack[on Slack]. The Elasticsearch GitHub repository is reserved for bug reports and feature requests only.
+#### 配置gradle 的 Builder and Run
 
-=== Building from Source
+Build and run using 》选 IntelliJ IDEA
 
-Elasticsearch uses https://gradle.org[Gradle] for its build system.
+Run tests using 》选 IntelliJ IDEA
 
-In order to create a distribution, simply run the `./gradlew assemble` command in the cloned directory.
+## Modify options
 
-The distribution for each project will be created under the `build/distributions` directory in that project.
+### 最终启动参数 vm options
 
-See the xref:TESTING.asciidoc[TESTING] for more information about running the Elasticsearch test suite.
+-Des.path.conf=G:\elasticsearch-7.6.0\home\config
+-Des.path.home=G:\elasticsearch-7.6.0\home
+-Dlog4j2.disable.jmx=true
+-Djava.security.policy=G:\elasticsearch-7.6.0\home\config\java.policy
 
-=== Upgrading from older Elasticsearch versions
+选中Add dependencies with provided scope to classpath
 
-In order to ensure a smooth upgrade process from earlier versions of Elasticsearch, please see our https://www.elastic.co/guide/en/elasticsearch/reference/current/setup-upgrade.html[upgrade documentation] for more details on the upgrade process.
+然后启动，成功后，访问以下地址。。。。
+
+http://localhost:9200/_cat/health
+
+http://localhost:9200/
+
+重点问题：
+
+#### java.lang.NoClassDefFoundError: org/elasticsearch/plugins/ExtendedPluginsClassLoader 报错
+
+[java.lang.NoClassDefFoundError: org/elasticsearch/plugins/ExtendedPluginsClassLoader 报错_我的男妈妈_歆语的博客-CSDN博客](https://blog.csdn.net/wodenanmama/article/details/120182411)
+
+[后端 - Elasticsearch7.3.2源码环境搭建 - 个人文章 - SegmentFault 思否](https://segmentfault.com/a/1190000022217206)
