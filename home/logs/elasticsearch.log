@@ -1,0 +1,6 @@
+[2023-09-21T01:30:00,226][INFO ][o.e.x.m.MlDailyMaintenanceService] [node-1] triggering scheduled [ML] maintenance tasks
+[2023-09-21T01:30:00,252][INFO ][o.e.x.m.a.TransportDeleteExpiredDataAction] [node-1] Deleting expired data
+[2023-09-21T01:30:00,592][INFO ][o.e.x.m.a.TransportDeleteExpiredDataAction] [node-1] Completed deletion of expired ML data
+[2023-09-21T01:30:00,593][INFO ][o.e.x.m.MlDailyMaintenanceService] [node-1] Successfully completed [ML] maintenance tasks
+[2023-09-21T09:30:00,477][INFO ][o.e.x.s.SnapshotRetentionTask] [node-1] starting SLM retention snapshot cleanup task
+[2023-09-21T09:47:35,683][INFO ][o.e.n.Node               ] [node-1] stopping ...
