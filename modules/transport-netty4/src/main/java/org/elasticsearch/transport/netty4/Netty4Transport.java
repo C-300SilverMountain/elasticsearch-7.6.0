@@ -145,6 +145,9 @@ public class Netty4Transport extends TcpTransport {
     }
 
     private Bootstrap createClientBootstrap(NioEventLoopGroup eventLoopGroup) {
+        //netty客户端，用于发送请求
+        //see: https://blog.csdn.net/u010853261/article/details/53738060
+
         final Bootstrap bootstrap = new Bootstrap();
         bootstrap.group(eventLoopGroup);
 

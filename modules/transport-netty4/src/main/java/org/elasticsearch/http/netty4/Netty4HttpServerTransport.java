@@ -179,18 +179,25 @@ public class Netty4HttpServerTransport extends AbstractHttpServerTransport {
     protected void doStart() {
         boolean success = false;
         try {
+            //netty服务器，用于接收客户端（Bootstrap）请求
+            //see: https://blog.csdn.net/u010853261/article/details/53738060
             serverBootstrap = new ServerBootstrap();
-
+            //一个boss EventLoopGroup,一个worker EventLoopGroup
+            //boss: 用于接收进来的连接
+            //worker: 用于处理已连接完成的请求
             serverBootstrap.group(new NioEventLoopGroup(workerCount, daemonThreadFactory(settings,
                 HTTP_SERVER_WORKER_THREAD_NAME_PREFIX)));
-
+            //配置不同的channel，此处是NioServerSocketChannel，可选：OioServerSocketChannel
             // NettyAllocator will return the channel type designed to work with the configuredAllocator
             serverBootstrap.channel(NettyAllocator.getServerChannelType());
 
             // Set the allocators for both the server channel and the child channels created
+            //配置TCP可选参数（全局，即boss和worker管理的channel）
             serverBootstrap.option(ChannelOption.ALLOCATOR, NettyAllocator.getAllocator());
+            //也是配置TCP可选参数，与option的区别是：仅作用于被acceptor(也就是boss EventLoopGroup)接收之后的channel
             serverBootstrap.childOption(ChannelOption.ALLOCATOR, NettyAllocator.getAllocator());
-
+            //重点：这里会调用分发请求类
+            //真正处理用户请求的多个处理器，以责任链模块进行管理及调用
             serverBootstrap.childHandler(configureServerChannelHandler());
             serverBootstrap.handler(new ServerChannelExceptionHandler(this));
 
@@ -238,7 +245,8 @@ public class Netty4HttpServerTransport extends AbstractHttpServerTransport {
             final boolean reuseAddress = SETTING_HTTP_TCP_REUSE_ADDRESS.get(settings);
             serverBootstrap.option(ChannelOption.SO_REUSEADDR, reuseAddress);
             serverBootstrap.childOption(ChannelOption.SO_REUSEADDR, reuseAddress);
-
+            //绑定端口9200、9300,开始接收进来的请求
+            //see: https://blog.csdn.net/u010853261/article/details/53738060
             bindServer();
             success = true;
         } finally {

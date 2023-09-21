@@ -80,6 +80,8 @@ final class Bootstrap {
             @Override
             public void run() {
                 try {
+                    //一直等待，直到keepAliveLatch.countDown()被调用
+                    //目测便于检测当前Node节点是否存活
                     keepAliveLatch.await();
                 } catch (InterruptedException e) {
                     // bail out
@@ -88,6 +90,8 @@ final class Bootstrap {
         }, "elasticsearch[keepAlive/" + Version.CURRENT + "]");
         keepAliveThread.setDaemon(false);
         // keep this thread alive (non daemon thread) until we shutdown
+        // 一句话概括就是： ShutdownHook允许开发人员在JVM关闭时执行相关的代码。
+        //see: https://blog.csdn.net/yangshangwei/article/details/102583944
         Runtime.getRuntime().addShutdownHook(new Thread() {
             @Override
             public void run() {

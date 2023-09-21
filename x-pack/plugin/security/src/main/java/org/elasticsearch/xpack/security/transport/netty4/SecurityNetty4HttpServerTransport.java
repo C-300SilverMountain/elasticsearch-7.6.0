@@ -26,6 +26,13 @@ import javax.net.ssl.SSLEngine;
 
 import static org.elasticsearch.xpack.core.XPackSettings.HTTP_SSL_ENABLED;
 
+/**
+ * SecurityNetty4HttpServerTransport 是 Netty4HttpServerTransport加强版
+ * 新增了权限验证功能，即访问更安全！
+ * @author: chenwm
+ * @since: 2023/9/15 17:00
+ * https://blog.csdn.net/xiaoliulang0324/article/details/79030752
+ */
 public class SecurityNetty4HttpServerTransport extends Netty4HttpServerTransport {
     private static final Logger logger = LogManager.getLogger(SecurityNetty4HttpServerTransport.class);
 

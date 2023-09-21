@@ -480,12 +480,14 @@ public class Node implements Closeable {
                 pluginsService.filterPlugins(ActionPlugin.class).stream().flatMap(p -> p.getTaskHeaders().stream()),
                 Stream.of(Task.X_OPAQUE_ID)
             ).collect(Collectors.toSet());
+            //初始化请求客户端，类似httpclient，用于召回
             final TransportService transportService = newTransportService(settings, transport, threadPool,
                 networkModule.getTransportInterceptor(), localNodeFactory, settingsModule.getClusterSettings(), taskHeaders);
             final GatewayMetaState gatewayMetaState = new GatewayMetaState();
             final ResponseCollectorService responseCollectorService = new ResponseCollectorService(clusterService);
             final SearchTransportService searchTransportService =  new SearchTransportService(transportService,
                 SearchExecutionStatsCollector.makeWrapper(responseCollectorService));
+            //初始化服务端，监听端口，接收此端口的请求
             final HttpServerTransport httpServerTransport = newHttpTransport(networkModule);
 
 
