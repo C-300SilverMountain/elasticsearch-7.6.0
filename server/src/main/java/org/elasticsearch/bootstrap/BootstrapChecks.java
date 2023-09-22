@@ -77,9 +77,11 @@ final class BootstrapChecks {
      */
     static void check(final BootstrapContext context, final BoundTransportAddress boundTransportAddress,
                       List<BootstrapCheck> additionalChecks) throws NodeValidationException {
+        //校验处理器集合：一个校验处理器负责校验一个内容
         final List<BootstrapCheck> builtInChecks = checks();
         final List<BootstrapCheck> combinedChecks = new ArrayList<>(builtInChecks);
         combinedChecks.addAll(additionalChecks);
+        //Collections.unmodifiableList：保证数据只读
         check(  context,
                 enforceLimits(boundTransportAddress, DiscoveryModule.DISCOVERY_TYPE_SETTING.get(context.settings())),
                 Collections.unmodifiableList(combinedChecks));
@@ -190,6 +192,7 @@ final class BootstrapChecks {
     // the list of checks to execute
     static List<BootstrapCheck> checks() {
         final List<BootstrapCheck> checks = new ArrayList<>();
+        //校验堆大小
         checks.add(new HeapSizeCheck());
         final FileDescriptorCheck fileDescriptorCheck
             = Constants.MAC_OS_X ? new OsXFileDescriptorCheck() : new FileDescriptorCheck();
@@ -223,7 +226,9 @@ final class BootstrapChecks {
 
         @Override
         public BootstrapCheckResult check(BootstrapContext context) {
+            //初始堆大小
             final long initialHeapSize = getInitialHeapSize();
+            //最大堆
             final long maxHeapSize = getMaxHeapSize();
             if (initialHeapSize != 0 && maxHeapSize != 0 && initialHeapSize != maxHeapSize) {
                 final String message = String.format(

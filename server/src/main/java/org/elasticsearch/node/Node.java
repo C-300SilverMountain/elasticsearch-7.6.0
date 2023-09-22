@@ -608,6 +608,9 @@ public class Node implements Closeable {
             client.initialize(injector.getInstance(new Key<Map<ActionType, TransportAction>>() {}), transportService.getTaskManager(),
                     () -> clusterService.localNode().getId(), transportService.getRemoteClusterService());
 
+            //重点：
+            //将action注册到RestController(分发器)
+            //一个地址对应一个action，如http://localhost:9200/_cat/health 交给 RestHealthActiov处理。。。
             logger.debug("initializing HTTP handlers ...");
             actionModule.initRestHandlers(() -> clusterService.state().nodes());
             logger.info("initialized");

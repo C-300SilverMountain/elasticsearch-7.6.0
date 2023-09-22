@@ -572,6 +572,7 @@ public class ActionModule extends AbstractModule {
                 catActions.add((AbstractCatAction) a);
             }
         };
+        //Action构造函数内部，执行注册逻辑
         registerHandler.accept(new RestAddVotingConfigExclusionAction(restController));
         registerHandler.accept(new RestClearVotingConfigExclusionsAction(restController));
         registerHandler.accept(new RestMainAction(restController));

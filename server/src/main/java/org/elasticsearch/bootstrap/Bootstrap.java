@@ -222,11 +222,14 @@ final class Bootstrap {
             throw new BootstrapException(e);
         }
 
+        //创建节点，代表一个lucene实例，并执行初始化
         node = new Node(environment) {
+            //节点校验，仅初始化时，执行校验一次，校验内容：如内存大小校验
             @Override
             protected void validateNodeBeforeAcceptingRequests(
                 final BootstrapContext context,
                 final BoundTransportAddress boundTransportAddress, List<BootstrapCheck> checks) throws NodeValidationException {
+                //执行具体校验
                 BootstrapChecks.check(context, boundTransportAddress, checks);
             }
         };
@@ -350,6 +353,9 @@ final class Bootstrap {
             // setDefaultUncaughtExceptionHandler
             Thread.setDefaultUncaughtExceptionHandler(new ElasticsearchUncaughtExceptionHandler());
 
+            //重点：
+            //创建一个节点node，代表一个lucene示例
+            //实例化action，并url，且注册到RestController
             INSTANCE.setup(true, environment);
 
             try {
@@ -359,6 +365,8 @@ final class Bootstrap {
                 throw new BootstrapException(e);
             }
 
+            //通讯协议初始化，这里默认是：netty
+            //监听端口，开始接收用户请求
             INSTANCE.start();
 
             // We don't close stderr if `--quiet` is passed, because that
