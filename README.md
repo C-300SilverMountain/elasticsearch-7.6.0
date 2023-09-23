@@ -1,20 +1,5 @@
 idea编译参考文章：[教你编译调试Elasticsearch 6.3.2源码-腾讯云开发者社区-腾讯云](https://cloud.tencent.com/developer/article/1385924)
 
-源码分析参考文章：
-
-* [【Elasticsearch源码】查询源码分析](https://blog.csdn.net/wudingmei1023/article/details/103968625)
-* [lucene源码分析](https://www.6aiq.com/member/Emma?p=2)
-* [SpanQuery源码学习总结](https://cloud.tencent.com/developer/article/1936235)
-* [SpanNearQuery（一）](https://blog.csdn.net/iteye_14612/article/details/82677774)
-* [SpanQuery跨度查询](https://developer.aliyun.com/article/45341)
-* [PhraseQuery 的 slop 的理解](https://my.oschina.net/wangguolongnk/blog/107690)
-* [lucene的使用](https://blog.csdn.net/z_ssyy/article/details/105234446)
-* [lucene索引结构](https://zhuanlan.zhihu.com/p/443722667)
-* [倒排表存储](https://juejin.cn/post/7123923721881911304)
-* [lucene源码系列](https://www.6aiq.com/member/Emma?p=1)
-* [书籍](https://github.com/reburning/book/blob/master/%E6%8E%A8%E8%8D%90%E7%B3%BB%E7%BB%9F%E5%AE%9E%E8%B7%B5.pdf)
-* [lucene搜索过程分析(重点看)](https://cloud.tencent.com/developer/article/1163393)
-
 # 必要条件：
 
 - VPN（可避免很多奇怪的问题）

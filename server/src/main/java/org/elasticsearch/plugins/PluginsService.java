@@ -132,6 +132,7 @@ public class PluginsService {
         // load modules
         if (modulesDirectory != null) {
             try {
+                //加载es内部插件，即modules 目录下的jar包
                 Set<Bundle> modules = getModuleBundles(modulesDirectory);
                 for (Bundle bundle : modules) {
                     modulesList.add(bundle.plugin);
@@ -148,6 +149,7 @@ public class PluginsService {
                 // TODO: remove this leniency, but tests bogusly rely on it
                 if (isAccessibleDirectory(pluginsDirectory, logger)) {
                     checkForFailedPluginRemovals(pluginsDirectory);
+                    //加载用户自定义插件，即 plugins 目录下的jar包
                     Set<Bundle> plugins = getPluginBundles(pluginsDirectory);
                     for (final Bundle bundle : plugins) {
                         pluginsList.add(bundle.plugin);
@@ -160,6 +162,7 @@ public class PluginsService {
             }
         }
 
+        //modules和plugins目录下都是插件，只是人为划分：内部插件(modules)和用户自定义插件(plugins)
         List<Tuple<PluginInfo, Plugin>> loaded = loadBundles(seenBundles);
         pluginsLoaded.addAll(loaded);
 

@@ -197,6 +197,10 @@ public class Node implements Closeable {
     public static final Setting<Boolean> NODE_DATA_SETTING = Setting.boolSetting("node.data", true, Property.NodeScope);
     public static final Setting<Boolean> NODE_MASTER_SETTING =
         Setting.boolSetting("node.master", true, Property.NodeScope);
+    /**
+     * ingest节点说明：
+     * https://juejin.cn/post/6844903873153335309
+     */
     public static final Setting<Boolean> NODE_INGEST_SETTING =
         Setting.boolSetting("node.ingest", true, Property.NodeScope);
 

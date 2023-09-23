@@ -79,6 +79,7 @@ public abstract class EnvironmentAwareCommand extends Command {
             settings.put(kvp.key, kvp.value);
         }
 
+        //从启动参数中读取指定配置参数值
         putSystemPropertyIfSettingIsMissing(settings, "path.data", "es.path.data");
         putSystemPropertyIfSettingIsMissing(settings, "path.home", "es.path.home");
         putSystemPropertyIfSettingIsMissing(settings, "path.logs", "es.path.logs");

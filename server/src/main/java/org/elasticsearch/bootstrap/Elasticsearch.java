@@ -88,6 +88,7 @@ class Elasticsearch extends EnvironmentAwareCommand {
 
         });
         LogConfigurator.registerErrorListener();
+        //猜想：创建一个实例，调用main，目的是适配单机环境下启动多个实例吧！！
         final Elasticsearch elasticsearch = new Elasticsearch();
         int status = main(args, elasticsearch, Terminal.DEFAULT);
         if (status != ExitCodes.OK) {
@@ -126,6 +127,14 @@ class Elasticsearch extends EnvironmentAwareCommand {
         return elasticsearch.main(args, terminal);
     }
 
+    /**
+     * Environment 其实保存的是：配置文件路径，以及配置文件的内容，重点是配置参数！！！
+     * 重点关注Environment.settings属性即可
+     * @param terminal
+     * @param options
+     * @param env
+     * @throws UserException
+     */
     @Override
     protected void execute(Terminal terminal, OptionSet options, Environment env) throws UserException {
         if (options.nonOptionArguments().isEmpty() == false) {
@@ -167,6 +176,7 @@ class Elasticsearch extends EnvironmentAwareCommand {
     void init(final boolean daemonize, final Path pidFile, final boolean quiet, Environment initialEnv)
         throws NodeValidationException, UserException {
         try {
+            //环境准备好后，开始执行es初始化工作
             Bootstrap.init(!daemonize, pidFile, quiet, initialEnv);
         } catch (BootstrapException | RuntimeException e) {
             // format exceptions to the console in a special way

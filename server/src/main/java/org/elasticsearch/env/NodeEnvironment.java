@@ -249,6 +249,7 @@ public final class NodeEnvironment  implements Closeable {
      * @param settings settings from elasticsearch.yml
      */
     public NodeEnvironment(Settings settings, Environment environment) throws IOException {
+        //是否存储数据
         if (!DiscoveryNode.nodeRequiresLocalStorage(settings)) {
             nodePaths = null;
             sharedDataPath = null;

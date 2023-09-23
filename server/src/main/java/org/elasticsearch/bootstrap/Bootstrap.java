@@ -164,6 +164,12 @@ final class Bootstrap {
         JvmInfo.jvmInfo();
     }
 
+    /**
+     * Environment: 执行初始化时所需的参数，或参数文件
+     * @param addShutdownHook 是否需要JVM关闭时，执行相关的代码
+     * @param environment
+     * @throws BootstrapException
+     */
     private void setup(boolean addShutdownHook, Environment environment) throws BootstrapException {
         Settings settings = environment.settings();
 
@@ -183,6 +189,8 @@ final class Bootstrap {
         initializeProbes();
 
         if (addShutdownHook) {
+            // 一句话概括就是： ShutdownHook允许开发人员在JVM关闭时，执行相关的代码。
+            //see: https://blog.csdn.net/yangshangwei/article/details/102583944
             Runtime.getRuntime().addShutdownHook(new Thread() {
                 @Override
                 public void run() {
@@ -223,6 +231,7 @@ final class Bootstrap {
         }
 
         //创建节点，代表一个lucene实例，并执行初始化
+        //这里初始化具体处理用户请求的服务
         node = new Node(environment) {
             //节点校验，仅初始化时，执行校验一次，校验内容：如内存大小校验
             @Override
@@ -307,13 +316,16 @@ final class Bootstrap {
         // the security manager is installed
         BootstrapInfo.init();
 
+        //初始化流程：起一个后台线程，证明实例存活，便于工具分析吧
         INSTANCE = new Bootstrap();
 
         final SecureSettings keystore = loadSecureSettings(initialEnv);
+        //为啥重新又生成？大概是因为配置隔离。而且执行初始化所需部分参数，initialEnv未读入
         final Environment environment = createEnvironment(pidFile, keystore, initialEnv.settings(), initialEnv.configFile());
 
         LogConfigurator.setNodeName(Node.NODE_NAME_SETTING.get(environment.settings()));
         try {
+            //日志插件初始化
             LogConfigurator.configure(environment);
         } catch (IOException e) {
             throw new BootstrapException(e);
@@ -328,6 +340,7 @@ final class Bootstrap {
         }
         if (environment.pidFile() != null) {
             try {
+                //创建一个临时文件，保存进程ID，进程退出时，自动删除该文件
                 PidFile.create(environment.pidFile(), true);
             } catch (IOException e) {
                 throw new BootstrapException(e);
@@ -365,6 +378,7 @@ final class Bootstrap {
                 throw new BootstrapException(e);
             }
 
+            //创建好node，即初始化本地服务后，再对外暴露端口接收请求！！！
             //通讯协议初始化，这里默认是：netty
             //监听端口，开始接收用户请求
             INSTANCE.start();
