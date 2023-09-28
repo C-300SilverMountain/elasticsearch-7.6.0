@@ -189,6 +189,8 @@ class Elasticsearch extends EnvironmentAwareCommand {
      * Required method that's called by Apache Commons procrun when
      * running as a service on Windows, when the service is stopped.
      *
+     * window版本es才生效，目标：资源释放
+     *
      * http://commons.apache.org/proper/commons-daemon/procrun.html
      *
      * NOTE: If this method is renamed and/or moved, make sure to

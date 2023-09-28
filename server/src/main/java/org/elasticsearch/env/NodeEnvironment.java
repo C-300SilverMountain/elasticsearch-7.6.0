@@ -264,11 +264,15 @@ public final class NodeEnvironment  implements Closeable {
         try {
             sharedDataPath = environment.sharedDataFile();
             IOException lastException = null;
+            //指同一个存储路径下最多能有多少个节点
+            //https://www.elastic.co/guide/en/elasticsearch/reference/7.5/modules-node.html#max-local-storage-nodes
+            //该属性准备弃用
             int maxLocalStorageNodes = MAX_LOCAL_STORAGE_NODES_SETTING.get(settings);
 
             final AtomicReference<IOException> onCreateDirectoriesException = new AtomicReference<>();
             for (int possibleLockId = 0; possibleLockId < maxLocalStorageNodes; possibleLockId++) {
                 try {
+                    //获取数据目录锁权限
                     nodeLock = new NodeLock(possibleLockId, logger, environment,
                         dir -> {
                             try {
@@ -309,6 +313,7 @@ public final class NodeEnvironment  implements Closeable {
                 logger.debug("using node location [{}], local_lock_id [{}]", nodePaths, nodeLockId);
             }
 
+            //可能会打印相关日志
             maybeLogPathDetails();
             maybeLogHeapDetails();
 

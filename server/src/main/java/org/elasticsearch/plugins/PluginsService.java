@@ -116,6 +116,7 @@ public class PluginsService {
         final List<String> pluginsNames = new ArrayList<>();
         // first we load plugins that are on the classpath. this is for tests and transport clients
         for (Class<? extends Plugin> pluginClass : classpathPlugins) {
+            //通过java原生反射生成对象
             Plugin plugin = loadPlugin(pluginClass, settings, configPath);
             PluginInfo pluginInfo = new PluginInfo(pluginClass.getName(), "classpath plugin", "NA", Version.CURRENT, "1.8",
                                                    pluginClass.getName(), Collections.emptyList(), false);
@@ -588,6 +589,7 @@ public class PluginsService {
     }
 
     private Plugin loadPlugin(Class<? extends Plugin> pluginClass, Settings settings, Path configPath) {
+        //通过java原生反射生成对象
         final Constructor<?>[] constructors = pluginClass.getConstructors();
         if (constructors.length == 0) {
             throw new IllegalStateException("no public constructor for [" + pluginClass.getName() + "]");

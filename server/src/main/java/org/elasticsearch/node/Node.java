@@ -278,6 +278,7 @@ public class Node implements Closeable {
             Settings tmpSettings = Settings.builder().put(environment.settings())
                 .put(Client.CLIENT_TYPE_SETTING_S.getKey(), CLIENT_TYPE).build();
 
+            //准备创建节点所需的参数，且对数据目录加锁
             nodeEnvironment = new NodeEnvironment(tmpSettings, environment);
             resourcesToClose.add(nodeEnvironment);
             logger.info("node name [{}], node ID [{}], cluster name [{}]",

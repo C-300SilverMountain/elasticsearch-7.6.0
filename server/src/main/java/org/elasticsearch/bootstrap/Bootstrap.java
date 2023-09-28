@@ -359,6 +359,7 @@ final class Bootstrap {
             }
 
             // fail if somebody replaced the lucene jars
+            //检查lucene版本信息
             checkLucene();
 
             // install the default uncaught exception handler; must be done before security is
