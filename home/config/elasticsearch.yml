@@ -14,7 +14,10 @@
 #
 # Use a descriptive name for your cluster:
 #
-#cluster.name: my-application
+cluster.name: my-application
+
+node.master: true
+node.data: true
 #
 # ------------------------------------ Node ------------------------------------
 #
@@ -53,6 +56,7 @@ node.name: node-1
 # Set the bind address to a specific IP (IPv4 or IPv6):
 #
 #network.host: 192.168.0.1
+network.host: localhost
 #
 # Set a custom port for HTTP:
 #
@@ -65,7 +69,7 @@ node.name: node-1
 # Pass an initial list of hosts to perform discovery when this node is started:
 # The default list of hosts is ["127.0.0.1", "[::1]"]
 #
-#discovery.seed_hosts: ["host1", "host2"]
+#discovery.seed_hosts: ["127.0.0.1:9301"]
 #
 # Bootstrap the cluster using an initial set of master-eligible nodes:
 #
