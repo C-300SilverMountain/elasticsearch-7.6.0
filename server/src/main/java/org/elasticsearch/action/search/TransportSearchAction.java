@@ -208,9 +208,9 @@ public class TransportSearchAction extends HandledTransportAction<SearchRequest,
             final Map<String, OriginalIndices> remoteClusterIndices = remoteClusterService.groupIndices(searchRequest.indicesOptions(),
                 searchRequest.indices(), idx -> indexNameExpressionResolver.hasIndexOrAlias(idx, clusterState));
             OriginalIndices localIndices = remoteClusterIndices.remove(RemoteClusterAware.LOCAL_CLUSTER_GROUP_KEY);
-            if (remoteClusterIndices.isEmpty()) {
+            if (remoteClusterIndices.isEmpty()) {//同一集群内检索：本地分片+远程分片检索
                 executeLocalSearch(task, timeProvider, searchRequest, localIndices, clusterState, listener);
-            } else {
+            } else {//跨集群检索
                 if (shouldMinimizeRoundtrips(searchRequest)) {
                     ccsRemoteReduce(searchRequest, localIndices, remoteClusterIndices, timeProvider, searchService::createReduceContext,
                         remoteClusterService, threadPool, listener,

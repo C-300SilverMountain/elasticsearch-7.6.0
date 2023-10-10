@@ -17,7 +17,8 @@
 cluster.name: my-application
 
 node.master: true
-node.data: true
+# 保证debug时，仅请求远程分片，不会请求本地分片
+node.data: false
 #
 # ------------------------------------ Node ------------------------------------
 #
