@@ -193,10 +193,10 @@ abstract class AbstractSearchAsyncAction<Result extends SearchPhaseResult> exten
                     throw new SearchPhaseExecutionException(getName(), msg, null, ShardSearchFailure.EMPTY_ARRAY);
                 }
             }
-            for (int index = 0; index < shardsIts.size(); index++) {
+            for (int index = 0; index < shardsIts.size(); index++) {//多分片召回
                 final SearchShardIterator shardRoutings = shardsIts.get(index);
                 assert shardRoutings.skip() == false;
-                performPhaseOnShard(index, shardRoutings, shardRoutings.nextOrNull());
+                performPhaseOnShard(index, shardRoutings, shardRoutings.nextOrNull());//nextOrNull:轮训路由策略
             }
         }
     }
@@ -230,7 +230,7 @@ abstract class AbstractSearchAsyncAction<Result extends SearchPhaseResult> exten
                             @Override
                             public void innerOnResponse(Result result) {
                                 try {
-                                    onShardResult(result, shardIt);
+                                    onShardResult(result, shardIt);//Query阶段的结果收集，并执行下一个阶段：Fetch
                                 } finally {
                                     executeNext(pendingExecutions, thread);
                                 }
@@ -493,7 +493,7 @@ abstract class AbstractSearchAsyncAction<Result extends SearchPhaseResult> exten
             remainingOpsOnIterator = shardsIt.remaining() + 1;
         }
         final int xTotalOps = totalOps.addAndGet(remainingOpsOnIterator);
-        if (xTotalOps == expectedTotalOps) {
+        if (xTotalOps == expectedTotalOps) {//已响应的分片数 等于 期望分片数，即最后一个分片返回后才触发Fetch阶段
             onPhaseDone();
         } else if (xTotalOps > expectedTotalOps) {
             throw new AssertionError("unexpected higher total ops [" + xTotalOps + "] compared to expected ["
