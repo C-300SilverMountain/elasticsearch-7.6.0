@@ -54,13 +54,15 @@ public class TestServer {
 
                 if (numKeys == 0) {
                     //下载jdk6最初版本jdk-6-linux-amd64-rpm.bin，部署到centos上，可观察到，从client断开后，一直打印这里
-                    //即select()，并没有阻塞，因为客户端断开后，通道状态发生变化，解除阻塞，以下代码有没有处理断开事件（jdk都没有定义，可查SelectionKey）
-                    //就会导致某个通道一直存在【断开事件】，该通道已失效
+                    //即select()，并没有阻塞，因为客户端断开后，通道状态发生变化，解除阻塞，以下代码并没有处理断开事件（jdk都没有定义，可查SelectionKey）
+                    //就会导致某个通道一直存在【断开事件】，但又得不到处理，所以导致【断开事件】无限触发
                     //https://www.oracle.com/java/technologies/javase-java-archive-javase6-downloads.html
                     System.err.println("select wakes up with zero!!!");
 
                     //netty解决思路：
                     // 统计因【断开事件】唤醒通道次数，当大于阈值时，遍历所有通道，将仍有效的通道注册到新的selector上，然后新selector取缔旧selector
+                    //重点：因为断开的通道会被标志为【无效】
+                    //可查看：NioEventLoop.rebuildSelector0
                 }
 
                 Iterator it = selector.selectedKeys().iterator();
