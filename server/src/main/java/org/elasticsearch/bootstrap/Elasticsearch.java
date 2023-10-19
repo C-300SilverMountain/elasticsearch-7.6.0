@@ -130,10 +130,10 @@ class Elasticsearch extends EnvironmentAwareCommand {
     /**
      * Environment 其实保存的是：配置文件路径，以及配置文件的内容，重点是配置参数！！！
      * 重点关注Environment.settings属性即可
-     * @param terminal
-     * @param options
-     * @param env
-     * @throws UserException
+     * @param terminal 略
+     * @param options 略
+     * @param env 略
+     * @throws UserException 略
      */
     @Override
     protected void execute(Terminal terminal, OptionSet options, Environment env) throws UserException {

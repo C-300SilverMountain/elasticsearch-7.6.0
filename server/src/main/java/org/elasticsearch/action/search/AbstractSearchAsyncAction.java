@@ -193,9 +193,9 @@ abstract class AbstractSearchAsyncAction<Result extends SearchPhaseResult> exten
                     throw new SearchPhaseExecutionException(getName(), msg, null, ShardSearchFailure.EMPTY_ARRAY);
                 }
             }
-            for (int index = 0; index < shardsIts.size(); index++) {//多分片召回
+            for (int index = 0; index < shardsIts.size(); index++) {//多分片召回，这里是shard级请求
                 final SearchShardIterator shardRoutings = shardsIts.get(index);
-                assert shardRoutings.skip() == false;
+                assert shardRoutings.skip() == false;//请求是基于shard遍历的，如果列表中有N个shard位于同一个节点，则向其发送N次请求，并不会把请求合并为一个。
                 performPhaseOnShard(index, shardRoutings, shardRoutings.nextOrNull());//nextOrNull:轮训路由策略
             }
         }
@@ -224,12 +224,12 @@ abstract class AbstractSearchAsyncAction<Result extends SearchPhaseResult> exten
                 : null;
             Runnable r = () -> {
                 final Thread thread = Thread.currentThread();
-                try {
+                try {//针对远程分片，此处仅是将请求存入发送队列，收到回复后，根据请求ID执行对应回调，即SearchActionListener
                     executePhaseOnShard(shardIt, shard,
                         new SearchActionListener<Result>(shardIt.newSearchShardTarget(shard.currentNodeId()), shardIndex) {
                             @Override
                             public void innerOnResponse(Result result) {
-                                try {
+                                try {//异步：收到对方回复
                                     onShardResult(result, shardIt);//Query阶段的结果收集，并执行下一个阶段：Fetch
                                 } finally {
                                     executeNext(pendingExecutions, thread);

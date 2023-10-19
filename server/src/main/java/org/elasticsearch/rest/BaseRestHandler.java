@@ -84,7 +84,7 @@ public abstract class BaseRestHandler implements RestHandler {
     @Override
     public final void handleRequest(RestRequest request, RestChannel channel, NodeClient client) throws Exception {
         // prepare the request for execution; has the side effect of touching the request parameters
-        final RestChannelConsumer action = prepareRequest(request, client);
+        final RestChannelConsumer action = prepareRequest(request, client);//根据uri定位到对应的action
 
         // validate unconsumed params, but we must exclude params used to format the response
         // use a sorted set so the unconsumed parameters appear in a reliable sorted order

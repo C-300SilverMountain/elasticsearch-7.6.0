@@ -143,8 +143,8 @@ public class Netty4TcpChannel implements TcpChannel {
 
     @Override
     public void sendMessage(BytesReference reference, ActionListener<Void> listener) {
-        channel.writeAndFlush(Netty4Utils.toByteBuf(reference), addPromise(listener, channel));
-
+        channel.writeAndFlush(Netty4Utils.toByteBuf(reference), addPromise(listener, channel));//这里仅仅是将请求 存入发送队列，等待后台线程发出去
+        //至于啥时候发送出去？NioEventLoop是个死循环逻辑，它其中一个重要任务就是：不断检测发送队列是否有任务，并执行
         if (channel.eventLoop().isShutdown()) {
             listener.onFailure(new TransportException("Cannot send message, event loop is shutting down."));
         }

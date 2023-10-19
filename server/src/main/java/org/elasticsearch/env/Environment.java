@@ -46,8 +46,8 @@ import java.util.stream.Collectors;
  * The environment of where things exists.
  * 用Environment对象代表配置信息，该对象中会保存配置文件路径，和配置文件内容，重点关注：文件内容
  * 即，重点关注：Environment.Settings属性！！！
- * @author: chenwm
- * @since: 2023/9/23 11:13
+ * author: chenwm
+ * since: 2023/9/23 11:13
  *
  */
 @SuppressForbidden(reason = "configures paths for the system")

@@ -33,6 +33,7 @@ import org.elasticsearch.transport.Transports;
 import java.nio.channels.ClosedChannelException;
 import java.util.ArrayDeque;
 import java.util.Queue;
+import java.util.Random;
 
 /**
  * A handler (must be the last one!) that does size based frame decoding and forwards the actual message
@@ -40,11 +41,16 @@ import java.util.Queue;
  */
 final class Netty4MessageChannelHandler extends ChannelDuplexHandler {
 
+    private long date = new Random().nextLong();
     private final Netty4Transport transport;
 
     private final Queue<WriteOperation> queuedWrites = new ArrayDeque<>();
 
     private WriteOperation currentWrite;
+
+    public long getDate() {
+        return date;
+    }
 
     Netty4MessageChannelHandler(Netty4Transport transport) {
         this.transport = transport;

@@ -167,8 +167,8 @@ final class Bootstrap {
     /**
      * Environment: 执行初始化时所需的参数，或参数文件
      * @param addShutdownHook 是否需要JVM关闭时，执行相关的代码
-     * @param environment
-     * @throws BootstrapException
+     * @param environment 略
+     * @throws BootstrapException 略
      */
     private void setup(boolean addShutdownHook, Environment environment) throws BootstrapException {
         Settings settings = environment.settings();

@@ -71,7 +71,7 @@ import static org.elasticsearch.common.settings.Setting.byteSizeSetting;
 import static org.elasticsearch.common.settings.Setting.intSetting;
 import static org.elasticsearch.common.util.concurrent.ConcurrentCollections.newConcurrentMap;
 import static org.elasticsearch.common.util.concurrent.EsExecutors.daemonThreadFactory;
-
+// 节点之间内部通信，端口是9300，仅是内部通信，不对外暴露
 /**
  * There are 4 types of connections per node, low/med/high/ping. Low if for batch oriented APIs (like recovery or
  * batch) with high payload that will cause regular request. (like search or single index) to take
@@ -328,7 +328,9 @@ public class Netty4Transport extends TcpTransport {
             ch.pipeline().addLast("logging", new ESLoggingHandler());
             ch.pipeline().addLast("size", new Netty4SizeHeaderFrameDecoder());
             // using a dot as a prefix means this cannot come from any settings parsed
-            ch.pipeline().addLast("dispatcher", new Netty4MessageChannelHandler(Netty4Transport.this));
+            Netty4MessageChannelHandler netty4MessageChannelHandler = new Netty4MessageChannelHandler(Netty4Transport.this);
+            logger.info("Client: "+netty4MessageChannelHandler.getDate());
+            ch.pipeline().addLast("dispatcher", netty4MessageChannelHandler);
         }
 
         @Override
@@ -353,7 +355,9 @@ public class Netty4Transport extends TcpTransport {
             ch.attr(CHANNEL_KEY).set(nettyTcpChannel);
             ch.pipeline().addLast("logging", new ESLoggingHandler());
             ch.pipeline().addLast("size", new Netty4SizeHeaderFrameDecoder());
-            ch.pipeline().addLast("dispatcher", new Netty4MessageChannelHandler(Netty4Transport.this));
+            Netty4MessageChannelHandler netty4MessageChannelHandler = new Netty4MessageChannelHandler(Netty4Transport.this);
+            logger.info("Server: "+netty4MessageChannelHandler.getDate());
+            ch.pipeline().addLast("dispatcher", netty4MessageChannelHandler);
             serverAcceptedChannel(nettyTcpChannel);
         }
 

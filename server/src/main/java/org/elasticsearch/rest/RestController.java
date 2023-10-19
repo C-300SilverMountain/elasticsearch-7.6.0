@@ -213,7 +213,7 @@ public class RestController implements HttpServerTransport.Dispatcher {
         }
         RestChannel responseChannel = channel;
         try {
-            if (handler.canTripCircuitBreaker()) {
+            if (handler.canTripCircuitBreaker()) {//请求级别断路器：检查当前内存使用情况，如大于阈值，则直接返回空值
                 inFlightRequestsBreaker(circuitBreakerService).addEstimateBytesAndMaybeBreak(contentLength, "<http_request>");
             } else {
                 inFlightRequestsBreaker(circuitBreakerService).addWithoutBreaking(contentLength);

@@ -663,7 +663,7 @@ public class TransportService extends AbstractLifecycleComponent implements Tran
             throw new IllegalStateException("can't send request to a null connection");
         }
         DiscoveryNode node = connection.getNode();
-
+        //responseHandlers.add（重点）: 将当前请求绑定一个handler，以便收到异步响应后，触发对应回调
         Supplier<ThreadContext.StoredContext> storedContextSupplier = threadPool.getThreadContext().newRestorableContext(true);
         ContextRestoreResponseHandler<T> responseHandler = new ContextRestoreResponseHandler<>(storedContextSupplier, handler);
         // TODO we can probably fold this entire request ID dance into connection.sendReqeust but it will be a bigger refactoring
@@ -672,7 +672,7 @@ public class TransportService extends AbstractLifecycleComponent implements Tran
         if (options.timeout() != null) {
             timeoutHandler = new TimeoutHandler(requestId, connection.getNode(), action);
             responseHandler.setTimeoutHandler(timeoutHandler);
-        } else {
+        } else {//神奇：请求分片，默认居然没有设置超时
             timeoutHandler = null;
         }
         try {
@@ -686,7 +686,7 @@ public class TransportService extends AbstractLifecycleComponent implements Tran
             if (timeoutHandler != null) {
                 assert options.timeout() != null;
                 timeoutHandler.scheduleTimeout(options.timeout());
-            }
+            }//最后：将请求封装成task，存入队列，等待发出去。注：发出去并不会阻塞等待响应结果，但却会拿到ACK（TCP）
             connection.sendRequest(requestId, action, request, options); // local node optimization happens upstream
         } catch (final Exception e) {
             // usually happen either because we failed to connect to the node

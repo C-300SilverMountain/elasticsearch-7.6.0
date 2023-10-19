@@ -99,9 +99,9 @@ final class FetchSearchPhase extends SearchPhase {
         final boolean isScrollSearch = context.getRequest().scroll() != null;
         List<SearchPhaseResult> phaseResults = queryResults.asList();
         String scrollId = isScrollSearch ? TransportSearchHelper.buildScrollId(queryResults) : null;
-        final SearchPhaseController.ReducedQueryPhase reducedQueryPhase = resultConsumer.reduce(); //重点：使用优先队列对各分片数据聚合重排序（最小堆）
+        final SearchPhaseController.ReducedQueryPhase reducedQueryPhase = resultConsumer.reduce(); //聚合（重点）：使用优先队列对各分片数据聚合重排序（最小堆）
         final boolean queryAndFetchOptimization = queryResults.length() == 1;
-        final Runnable finishPhase = ()
+        final Runnable finishPhase = ()//聚合query阶段结果后，再执行Fetch阶段
             -> moveToNextPhase(searchPhaseController, scrollId, reducedQueryPhase, queryAndFetchOptimization ?
             queryResults : fetchResults);
         if (queryAndFetchOptimization) {

@@ -245,7 +245,7 @@ public class Netty4HttpServerTransport extends AbstractHttpServerTransport {
             final boolean reuseAddress = SETTING_HTTP_TCP_REUSE_ADDRESS.get(settings);
             serverBootstrap.option(ChannelOption.SO_REUSEADDR, reuseAddress);
             serverBootstrap.childOption(ChannelOption.SO_REUSEADDR, reuseAddress);
-            //绑定端口9200、9300,开始接收进来的请求
+            //绑定端口9200,开始接收外部进来的请求。（注；）是外部请求，集群节点间通信在：Netty4Transport内部处理
             //see: https://blog.csdn.net/u010853261/article/details/53738060
             bindServer();
             success = true;
