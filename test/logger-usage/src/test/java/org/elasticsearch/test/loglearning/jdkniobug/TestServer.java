@@ -14,7 +14,7 @@ import java.util.logging.*;
  * @since: 2023/10/10 11:50
  * @see https://blog.csdn.net/May121812345/article/details/120391457?spm=1001.2014.3001.5502
  *      https://cloud.tencent.com/developer/article/1543810
- *      https://bugs.java.com/bugdatabase/view_bug.do?bug_id=6670302
+ * 源码来源： https://bugs.java.com/bugdatabase/view_bug.do?bug_id=6670302
  *
  */
 public class TestServer {
