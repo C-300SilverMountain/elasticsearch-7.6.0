@@ -1,4 +1,4 @@
-package org.elasticsearch.test.groupchat;
+package org.elasticsearch.test.niogroupchat;
 
 
 import java.io.IOException;
