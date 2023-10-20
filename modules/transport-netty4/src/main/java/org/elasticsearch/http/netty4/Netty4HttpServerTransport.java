@@ -187,20 +187,20 @@ public class Netty4HttpServerTransport extends AbstractHttpServerTransport {
             //worker: 用于处理已连接完成的请求
             serverBootstrap.group(new NioEventLoopGroup(workerCount, daemonThreadFactory(settings,
                 HTTP_SERVER_WORKER_THREAD_NAME_PREFIX)));
-            //配置不同的channel，此处是NioServerSocketChannel，可选：OioServerSocketChannel
+            //配置不同的ServerChannel实现，此处是NioServerSocketChannel，可选：OioServerSocketChannel
             // NettyAllocator will return the channel type designed to work with the configuredAllocator
             serverBootstrap.channel(NettyAllocator.getServerChannelType());
 
             // Set the allocators for both the server channel and the child channels created
-            //配置TCP可选参数（全局，即boss和worker管理的channel）
+            //配置TCP可选参数（全局，即boss和worker管理的channel）. 【用来给 ServerChannel 添加配置】
             serverBootstrap.option(ChannelOption.ALLOCATOR, NettyAllocator.getAllocator());
-            //也是配置TCP可选参数，与option的区别是：仅作用于被acceptor(也就是boss EventLoopGroup)接收之后的channel
+            //也是配置TCP可选参数，与option的区别是：仅作用于被acceptor(也就是boss EventLoopGroup)接收之后的channel. 【用来给接收到的通道添加配置】
             serverBootstrap.childOption(ChannelOption.ALLOCATOR, NettyAllocator.getAllocator());
             //重点：这里会调用分发请求类
-            //真正处理用户请求的多个处理器，以责任链模块进行管理及调用
+            //真正处理用户请求的多个处理器，以责任链模块进行管理及调用. 【用来给接收到的通道添加 处理器】
             serverBootstrap.childHandler(configureServerChannelHandler());
-            serverBootstrap.handler(new ServerChannelExceptionHandler(this));
-
+            serverBootstrap.handler(new ServerChannelExceptionHandler(this));//【用来给 ServerChannel 添加处理器】
+            //用来给接收到的通道添加配置】
             serverBootstrap.childOption(ChannelOption.TCP_NODELAY, SETTING_HTTP_TCP_NO_DELAY.get(settings));
             serverBootstrap.childOption(ChannelOption.SO_KEEPALIVE, SETTING_HTTP_TCP_KEEP_ALIVE.get(settings));
 
@@ -209,20 +209,20 @@ public class Netty4HttpServerTransport extends AbstractHttpServerTransport {
                 if (IOUtils.LINUX || IOUtils.MAC_OS_X) {
                     if (SETTING_HTTP_TCP_KEEP_IDLE.get(settings) >= 0) {
                         final SocketOption<Integer> keepIdleOption = NetUtils.getTcpKeepIdleSocketOptionOrNull();
-                        if (keepIdleOption != null) {
+                        if (keepIdleOption != null) {//【用来给接收到的通道添加配置】
                             serverBootstrap.childOption(NioChannelOption.of(keepIdleOption), SETTING_HTTP_TCP_KEEP_IDLE.get(settings));
                         }
                     }
                     if (SETTING_HTTP_TCP_KEEP_INTERVAL.get(settings) >= 0) {
                         final SocketOption<Integer> keepIntervalOption = NetUtils.getTcpKeepIntervalSocketOptionOrNull();
-                        if (keepIntervalOption != null) {
+                        if (keepIntervalOption != null) {//【用来给接收到的通道添加配置】
                             serverBootstrap.childOption(NioChannelOption.of(keepIntervalOption),
                                 SETTING_HTTP_TCP_KEEP_INTERVAL.get(settings));
                         }
                     }
                     if (SETTING_HTTP_TCP_KEEP_COUNT.get(settings) >= 0) {
                         final SocketOption<Integer> keepCountOption = NetUtils.getTcpKeepCountSocketOptionOrNull();
-                        if (keepCountOption != null) {
+                        if (keepCountOption != null) {//【用来给接收到的通道添加配置】
                             serverBootstrap.childOption(NioChannelOption.of(keepCountOption), SETTING_HTTP_TCP_KEEP_COUNT.get(settings));
                         }
                     }
@@ -230,12 +230,12 @@ public class Netty4HttpServerTransport extends AbstractHttpServerTransport {
             }
 
             final ByteSizeValue tcpSendBufferSize = SETTING_HTTP_TCP_SEND_BUFFER_SIZE.get(settings);
-            if (tcpSendBufferSize.getBytes() > 0) {
+            if (tcpSendBufferSize.getBytes() > 0) {//【用来给接收到的通道添加配置】
                 serverBootstrap.childOption(ChannelOption.SO_SNDBUF, Math.toIntExact(tcpSendBufferSize.getBytes()));
             }
 
             final ByteSizeValue tcpReceiveBufferSize = SETTING_HTTP_TCP_RECEIVE_BUFFER_SIZE.get(settings);
-            if (tcpReceiveBufferSize.getBytes() > 0) {
+            if (tcpReceiveBufferSize.getBytes() > 0) {//【用来给接收到的通道添加配置】
                 serverBootstrap.childOption(ChannelOption.SO_RCVBUF, Math.toIntExact(tcpReceiveBufferSize.getBytes()));
             }
 
@@ -258,7 +258,7 @@ public class Netty4HttpServerTransport extends AbstractHttpServerTransport {
 
     @Override
     protected HttpServerChannel bind(InetSocketAddress socketAddress) throws Exception {
-        ChannelFuture future = serverBootstrap.bind(socketAddress).sync();
+        ChannelFuture future = serverBootstrap.bind(socketAddress).sync();//该方法用于服务器端，用来设置占用的端口号
         Channel channel = future.channel();
         Netty4HttpServerChannel httpServerChannel = new Netty4HttpServerChannel(channel);
         channel.attr(HTTP_SERVER_CHANNEL_KEY).set(httpServerChannel);

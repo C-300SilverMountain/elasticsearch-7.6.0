@@ -162,7 +162,7 @@ public abstract class AbstractHttpServerTransport extends AbstractLifecycleCompo
         final AtomicReference<InetSocketAddress> boundSocket = new AtomicReference<>();
         boolean success = port.iterate(portNumber -> {
             try {
-                synchronized (httpServerChannels) {
+                synchronized (httpServerChannels) {//该方法用于服务器端，用来设置占用的端口号
                     HttpServerChannel httpServerChannel = bind(new InetSocketAddress(hostAddress, portNumber));
                     httpServerChannels.add(httpServerChannel);
                     boundSocket.set(httpServerChannel.getLocalAddress());

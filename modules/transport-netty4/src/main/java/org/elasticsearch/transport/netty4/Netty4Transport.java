@@ -283,7 +283,7 @@ public class Netty4Transport extends TcpTransport {
         Bootstrap bootstrapWithHandler = clientBootstrap.clone();
         bootstrapWithHandler.handler(getClientChannelInitializer(node));
         bootstrapWithHandler.remoteAddress(address);
-        ChannelFuture connectFuture = bootstrapWithHandler.connect();
+        ChannelFuture connectFuture = bootstrapWithHandler.connect();//该方法用于客户端，用来连接远程服务器端
 
         Channel channel = connectFuture.channel();
         if (channel == null) {
