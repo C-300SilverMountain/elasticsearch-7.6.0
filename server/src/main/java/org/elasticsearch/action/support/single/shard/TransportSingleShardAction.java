@@ -143,13 +143,13 @@ public abstract class TransportSingleShardAction<Request extends SingleShardRequ
 
         private AsyncSingleAction(Request request, ActionListener<Response> listener) {
             this.listener = listener;
-
+            //获取了集群状态类，并且从中得到了节点列表的信息。
             ClusterState clusterState = clusterService.state();
             if (logger.isTraceEnabled()) {
                 logger.trace("executing [{}] based on cluster state version [{}]", request, clusterState.version());
             }
             nodes = clusterState.nodes();
-            ClusterBlockException blockException = checkGlobalBlock(clusterState);
+            ClusterBlockException blockException = checkGlobalBlock(clusterState); //检查是否全局读阻塞，如果是读阻塞则抛出异常
             if (blockException != null) {
                 throw blockException;
             }
@@ -161,17 +161,19 @@ public abstract class TransportSingleShardAction<Request extends SingleShardRequ
                 concreteSingleIndex = request.index();
             }
             this.internalRequest = new InternalRequest(request, concreteSingleIndex);
-            resolveRequest(clusterState, internalRequest);
+            resolveRequest(clusterState, internalRequest); //解析请求，更新指定的 routing。
 
-            blockException = checkRequestBlock(clusterState, internalRequest);
+            blockException = checkRequestBlock(clusterState, internalRequest); //再次检查请求是否读阻塞，如果是读阻塞则抛出异常。
             if (blockException != null) {
                 throw blockException;
             }
 
-            this.shardIt = shards(clusterState, internalRequest);
+            this.shardIt = shards(clusterState, internalRequest); //根据路由算法或者优先级参数（preference）选择出对应的分片列表（一个迭代器）
         }
 
         public void start() {
+            //如果 shardIt 为空的时候，调用 transportService.sendRequest，并且此时的 node 为 localNode。
+            // 而当找到 shardIt 的时候，则调用 perform 方法
             if (shardIt == null) {
                 // just execute it on the local node
                 final Writeable.Reader<Response> reader = getResponseReader();
@@ -216,7 +218,7 @@ public abstract class TransportSingleShardAction<Request extends SingleShardRequ
                 lastFailure = currentFailure;
                 this.lastFailure = currentFailure;
             }
-            final ShardRouting shardRouting = shardIt.nextOrNull();
+            final ShardRouting shardRouting = shardIt.nextOrNull(); //首先从 shardIt 获取 ShardRouting，并且判断其是否为空。
             if (shardRouting == null) {
                 Exception failure = lastFailure;
                 if (failure == null || isShardNotAvailableException(failure)) {
@@ -229,10 +231,10 @@ public abstract class TransportSingleShardAction<Request extends SingleShardRequ
                 listener.onFailure(failure);
                 return;
             }
-            DiscoveryNode node = nodes.get(shardRouting.currentNodeId());
+            DiscoveryNode node = nodes.get(shardRouting.currentNodeId()); //根据 ShardRouting 的当前 node id 获取 DiscoveryNode，并且判断其是否为空。
             if (node == null) {
                 onFailure(shardRouting, new NoShardAvailableActionException(shardRouting.shardId()));
-            } else {
+            } else {//用 shardRouting.shardId 设置 internalShardId。
                 internalRequest.request().internalShardId = shardRouting.shardId();
                 if (logger.isTraceEnabled()) {
                     logger.trace(
@@ -241,7 +243,7 @@ public abstract class TransportSingleShardAction<Request extends SingleShardRequ
                             internalRequest.request().internalShardId,
                             node
                     );
-                }
+                }//调用 transportService.sendRequest，此时的 node 为计算出来的 DiscoveryNode。
                 final Writeable.Reader<Response> reader = getResponseReader();
                 transportService.sendRequest(node, transportShardAction, internalRequest.request(),
                     new TransportResponseHandler<Response>() {
@@ -285,7 +287,7 @@ public abstract class TransportSingleShardAction<Request extends SingleShardRequ
         public void messageReceived(final Request request, final TransportChannel channel, Task task) throws Exception {
             if (logger.isTraceEnabled()) {
                 logger.trace("executing [{}] on shard [{}]", request, request.internalShardId);
-            }
+            }//其负责读取数据并且包装结果进行返回：
             asyncShardOperation(request, request.internalShardId, new ChannelActionListener<>(channel, transportShardAction, request));
         }
     }

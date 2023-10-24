@@ -52,6 +52,12 @@ class Elasticsearch extends EnvironmentAwareCommand {
 
     // visible for testing
     Elasticsearch() {
+//        super("Starts Elasticsearch", new Runnable() {
+//            @Override
+//            public void run() {
+//                //等同下面代码，啥也不干
+//            }
+//        });
         super("Starts Elasticsearch", () -> {}); // we configure logging later so we override the base class from configuring logging
         versionOption = parser.acceptsAll(Arrays.asList("V", "version"),
             "Prints Elasticsearch version information and exits");
@@ -70,7 +76,7 @@ class Elasticsearch extends EnvironmentAwareCommand {
     }
 
     /**
-     * Main entry point for starting elasticsearch
+     * Main entry point for starting elasticsearch //一个 REST 请求最终会在对应的 Transport*Action 的类中处理
      */
     public static void main(final String[] args) throws Exception {
         overrideDnsCachePolicyProperties();
@@ -132,14 +138,14 @@ class Elasticsearch extends EnvironmentAwareCommand {
      * 重点关注Environment.settings属性即可
      * @param terminal 略
      * @param options 略
-     * @param env 略
+     * @param env 配置参数值，通过此对象可以拿到任意配置参数值
      * @throws UserException 略
      */
     @Override
     protected void execute(Terminal terminal, OptionSet options, Environment env) throws UserException {
         if (options.nonOptionArguments().isEmpty() == false) {
             throw new UserException(ExitCodes.USAGE, "Positional arguments not allowed, found " + options.nonOptionArguments());
-        }
+        }//输出版本信息. program arguments: 添加 --version，即会触发
         if (options.has(versionOption)) {
             final String versionOutput = String.format(
                 Locale.ROOT,
@@ -154,13 +160,13 @@ class Elasticsearch extends EnvironmentAwareCommand {
             terminal.println(versionOutput);
             return;
         }
-
+        //是否后台运行. program arguments: 添加 -d 或 -daemonize，即会触发
         final boolean daemonize = options.has(daemonizeOption);
-        final Path pidFile = pidfileOption.value(options);
+        final Path pidFile = pidfileOption.value(options);//当前实例ID存储路径
         final boolean quiet = options.has(quietOption);
 
         // a misconfigured java.io.tmpdir can cause hard-to-diagnose problems later, so reject it immediately
-        try {
+        try {//检测临时目录是否存在
             env.validateTmpFile();
         } catch (IOException e) {
             throw new UserException(ExitCodes.CONFIG, e.getMessage());

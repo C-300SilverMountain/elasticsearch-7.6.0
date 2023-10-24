@@ -166,6 +166,8 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
             IndexRequest indexRequest = getIndexWriteRequest(actionRequest);
             if (indexRequest != null) {
                 // Each index request needs to be evaluated, because this method also modifies the IndexRequest
+                // 遍历所有的请求项判断是否有请求需要执行 pipeline 预处理。
+                //see: https://www.lishuo.net/read/elasticsearch/date-2023.05.24.16.58.36
                 boolean indexRequestHasPipeline = resolvePipelines(actionRequest, indexRequest, metaData);
                 hasIndexRequestsWithPipelines |= indexRequestHasPipeline;
             }
@@ -192,6 +194,7 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
                         .allMatch(IndexRequest::isPipelineResolved);
                     assert arePipelinesResolved : bulkRequest;
                 }
+                //如果本节点是 Ingest Node，这将 pipeline 请求项留着本地处理，否则调用 ingestForwarder.forwardIngestRequest 转发 pipeline 请求。
                 if (clusterService.localNode().isIngestNode()) {
                     processBulkIndexIngestRequest(task, bulkRequest, listener);
                 } else {
@@ -217,6 +220,7 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
             /* Step 2: filter that to indices that don't exist and we can create. At the same time build a map of indices we can't create
              * that we'll use when we try to run the requests. */
             final Map<String, IndexNotFoundException> indicesThatCannotBeCreated = new HashMap<>();
+            //在集群元数据中，逐个判断当前索引是否存在，这些不存在的索引存储在 autoCreateIndices 中。
             Set<String> autoCreateIndices = new HashSet<>();
             ClusterState state = clusterService.state();
             for (String index : indices) {
@@ -234,7 +238,7 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
             // Step 3: create all the indices that are missing, if there are any missing. start the bulk after all the creates come back.
             if (autoCreateIndices.isEmpty()) {
                 executeBulk(task, bulkRequest, startTime, listener, responses, indicesThatCannotBeCreated);
-            } else {
+            } else {//如果 autoCreateIndices 不为空，则说明需要创建索引，此时遍历 autoCreateIndices，为各个不存在的索引调用 createIndex 方法进行创建索引。
                 final AtomicInteger counter = new AtomicInteger(autoCreateIndices.size());
                 for (String index : autoCreateIndices) {
                     createIndex(index, bulkRequest.timeout(), new ActionListener<CreateIndexResponse>() {
@@ -363,7 +367,7 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
     boolean shouldAutoCreate(String index, ClusterState state) {
         return autoCreateIndex.shouldAutoCreate(index, state);
     }
-
+    //创建索引的请求会转发到 Master 节点进行处理，协调节点会等到这些请求都返回后才会执行下一步操作。
     void createIndex(String index, TimeValue timeout, ActionListener<CreateIndexResponse> listener) {
         CreateIndexRequest createIndexRequest = new CreateIndexRequest();
         createIndexRequest.index(index);

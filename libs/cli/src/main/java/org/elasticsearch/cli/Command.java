@@ -64,9 +64,10 @@ public abstract class Command implements Closeable {
     /** Parses options for this command from args and executes it. */
     public final int main(String[] args, Terminal terminal) throws Exception {
         if (addShutdownHook()) {
-
+            //一句话概括就是： ShutdownHook允许开发人员在JVM关闭时执行相关的代码。
+            //see: https://blog.csdn.net/yangshangwei/article/details/102583944
             shutdownHookThread = new Thread(() -> {
-                try {
+                try {//目标：释放资源
                     this.close();
                 } catch (final IOException e) {
                     try (
@@ -83,7 +84,7 @@ public abstract class Command implements Closeable {
             });
             Runtime.getRuntime().addShutdownHook(shutdownHookThread);
         }
-
+        //启动之前执行自定义代码，这里是执行空逻辑
         beforeMain.run();
 
         try {
@@ -108,12 +109,12 @@ public abstract class Command implements Closeable {
      */
     void mainWithoutErrorHandling(String[] args, Terminal terminal) throws Exception {
         final OptionSet options = parser.parse(args);
-
+        //program arguments 包含：--help 或 -h
         if (options.has(helpOption)) {
             printHelp(terminal, false);
             return;
         }
-
+        //控制台输出日志级别
         if (options.has(silentOption)) {
             terminal.setVerbosity(Terminal.Verbosity.SILENT);
         } else if (options.has(verboseOption)) {

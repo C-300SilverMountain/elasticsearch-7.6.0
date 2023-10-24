@@ -115,7 +115,7 @@ final class Security {
      * @param filterBadDefaults true if we should filter out bad java defaults in the system policy.
      */
     static void configure(Environment environment, boolean filterBadDefaults) throws IOException, NoSuchAlgorithmException {
-
+        //保证运行发行版的时候，加载的是 lib 目录里的 jar，而通过 idea 运行的时候加载的是 libs 里的是编译好的 class 文件：
         // enable security policy: union of template and environment-based paths, and possibly plugin permissions
         Map<String, URL> codebases = getCodebaseJarMap(JarHell.parseClassPath());
         Policy.setPolicy(new ESPolicy(codebases, createPermissions(environment), getPluginPermissions(environment), filterBadDefaults));

@@ -104,16 +104,19 @@ final class Bootstrap {
     public static void initializeNatives(Path tmpFile, boolean mlockAll, boolean systemCallFilter, boolean ctrlHandler) {
         final Logger logger = LogManager.getLogger(Bootstrap.class);
 
+        //不能以 root 运行。
         // check if the user is running as root, and bail
         if (Natives.definitelyRunningAsRoot()) {
             throw new RuntimeException("can not run elasticsearch as root");
         }
 
+        //尝试启用系统调用过滤器。
         // enable system call filter
         if (systemCallFilter) {
             Natives.tryInstallSystemCallFilter(tmpFile);
         }
 
+        //尝试调用 mlockall，mlockall 会将进程使用的部分或者全部的地址空间锁定在物理内存中，防止其被交换到swap空间。
         // mlockall if requested
         if (mlockAll) {
             if (Constants.WINDOWS) {
@@ -122,7 +125,7 @@ final class Bootstrap {
                Natives.tryMlockall();
             }
         }
-
+        //如果是运行在 Windows 的话，关闭事件的监听器。
         // listener for windows close event
         if (ctrlHandler) {
             Natives.addConsoleCtrlHandler(new ConsoleCtrlHandler() {
@@ -148,11 +151,11 @@ final class Bootstrap {
         } catch (Exception ignored) {
             // we've already logged this.
         }
-
+        //尝试设置最大线程数量、最大虚拟内存、最大文件 size。
         Natives.trySetMaxNumberOfThreads();
         Natives.trySetMaxSizeVirtualMemory();
         Natives.trySetMaxFileSize();
-
+        //为 lucene 设置一个随机的 seed。
         // init lucene random seed. it will use /dev/urandom where available:
         StringHelper.randomId();
     }
@@ -172,22 +175,27 @@ final class Bootstrap {
      */
     private void setup(boolean addShutdownHook, Environment environment) throws BootstrapException {
         Settings settings = environment.settings();
-
+        //See: https://www.lishuo.net/read/elasticsearch/date-2023.05.24.16.58.21
+        //spawnNativeControllers 的作用主要是尝试为每个模块（modules 目录下的模块）生成 native 控制器守护进程的。
+        // 生成的进程将通过其 stdin、stdout 和 stderr 流保持与此 JVM 的连接，这个进程不应该写入任何数据到其 stdout 和 stderr，
+        // 否则如果没有其他线程读取这些 output 数据的话，这个进程将会被阻塞，
+        // 为了避免这种情况发生，可以继承 JVM 的 stdout 和 stderr（在标准安装中，它们会被重定向到文件）
         try {
             spawner.spawnNativeControllers(environment);
         } catch (IOException e) {
             throw new BootstrapException(e);
         }
 
+        //本地资源初始化
         initializeNatives(
                 environment.tmpFile(),
                 BootstrapSettings.MEMORY_LOCK_SETTING.get(settings),
                 BootstrapSettings.SYSTEM_CALL_FILTER_SETTING.get(settings),
                 BootstrapSettings.CTRLHANDLER_SETTING.get(settings));
-
+        //调用 initializeProbes() 进行初始化探针操作，主要用于操作系统负载监控、jvm 信息获取、进程相关信息获取。
         // initialize probes before the security manager is installed
         initializeProbes();
-
+        //注册关闭资源的 ShutdownHook
         if (addShutdownHook) {
             // 一句话概括就是： ShutdownHook允许开发人员在JVM关闭时，执行相关的代码。
             //see: https://blog.csdn.net/yangshangwei/article/details/102583944
@@ -195,7 +203,7 @@ final class Bootstrap {
                 @Override
                 public void run() {
                     try {
-                        IOUtils.close(node, spawner);
+                        IOUtils.close(node, spawner);//注册看一个 ShutdownHook，用于在系统关闭的时候关闭相关的 IO 流、日志上下文。
                         LoggerContext context = (LoggerContext) LogManager.getContext(false);
                         Configurator.shutdown(context);
                         if (node != null && node.awaitClose(10, TimeUnit.SECONDS) == false) {
@@ -215,30 +223,30 @@ final class Bootstrap {
         try {
             // look for jar hell
             final Logger logger = LogManager.getLogger(JarHell.class);
-            JarHell.checkJarHell(logger::debug);
+            JarHell.checkJarHell(logger::debug); //通过调用 JarHell.checkJarHell 检查是否有重复的类
         } catch (IOException | URISyntaxException e) {
             throw new BootstrapException(e);
         }
 
         // Log ifconfig output before SecurityManager is installed
-        IfConfig.logIfNecessary();
+        IfConfig.logIfNecessary(); //在Debug 模式下以 ifconfig 格式输出网络信息
 
         // install SM after natives, shutdown hooks, etc.
-        try {
+        try {//加载安全管理器，进行权限认证 通过调用 Security.configure 函数进行安全管理器加载，进行权限认证操作：
             Security.configure(environment, BootstrapSettings.SECURITY_FILTER_BAD_DEFAULTS_SETTING.get(settings));
         } catch (IOException | NoSuchAlgorithmException e) {
             throw new BootstrapException(e);
         }
 
         //创建节点，代表一个lucene实例，并执行初始化
-        //这里初始化具体处理用户请求的服务
+        //这里初始化具体处理用户请求的服务，开始根据配置 实例化对应的服务实例，并注册到 【Guice】 谷歌提供的轻量级 IOC 库
         node = new Node(environment) {
             //节点校验，仅初始化时，执行校验一次，校验内容：如内存大小校验
             @Override
             protected void validateNodeBeforeAcceptingRequests(
                 final BootstrapContext context,
                 final BoundTransportAddress boundTransportAddress, List<BootstrapCheck> checks) throws NodeValidationException {
-                //执行具体校验
+                //接收外来请求之前，做一下检查工作：如堆内存大小检查
                 BootstrapChecks.check(context, boundTransportAddress, checks);
             }
         };
@@ -252,6 +260,9 @@ final class Bootstrap {
             throw new BootstrapException(e);
         }
 
+        // loadSecureSettings 函数中进行加载 elasticsearch.keystore 中的安全配置，
+        // 如果 elasticsearch.keystore 不存在，则进行创建并且保存相关信息，
+        // 如果 elasticsearch.keystore 存在，则更新配置信息。
         try {
             if (keystore == null) {
                 final KeyStoreWrapper keyStoreWrapper = KeyStoreWrapper.create();
@@ -286,7 +297,7 @@ final class Bootstrap {
     }
 
     private void start() throws NodeValidationException {
-        node.start();
+        node.start();//Node.start 主要负责启动各个生命周期组件（LifecycleComponent）和从 Guice（ 也就是 injector）中的获取各个需要启动的服务类实例，然后调用它们的 start 方法。
         keepAliveThread.start();
     }
 
@@ -319,13 +330,15 @@ final class Bootstrap {
         //初始化流程：起一个后台线程，证明实例存活，便于工具分析吧
         INSTANCE = new Bootstrap();
 
+        //在 config 目录会生成一个 elasticsearch.keystore 文件，这个文件是用来保存一些敏感配置的
+        //ES 大多数配置都是明文保存的，但是像 X-Pack 中的 security 配置需要进行加密保存，所以这些配置信息就是保存在 elasticsearch.keystore 中
         final SecureSettings keystore = loadSecureSettings(initialEnv);
         //为啥重新又生成？大概是因为配置隔离。而且执行初始化所需部分参数，initialEnv未读入
         final Environment environment = createEnvironment(pidFile, keystore, initialEnv.settings(), initialEnv.configFile());
 
         LogConfigurator.setNodeName(Node.NODE_NAME_SETTING.get(environment.settings()));
         try {
-            //日志插件初始化
+            //日志插件初始化。 调用 LogConfigurator.configure 加载 log4j2.properties 文件中的相关配置，然后配置 log4j 的属性。
             LogConfigurator.configure(environment);
         } catch (IOException e) {
             throw new BootstrapException(e);
@@ -359,17 +372,24 @@ final class Bootstrap {
             }
 
             // fail if somebody replaced the lucene jars
-            //检查lucene版本信息
+            //检查lucene版本信息. 该函数通过版本号来检查 lucene 是否被替换了，如果 lucene 被替换将无法启动。
             checkLucene();
-
+            //setDefaultUncaughtExceptionHandler 相当于全局的 catch ，用于捕获程序未捕获的异常，以避免程序终止。
             // install the default uncaught exception handler; must be done before security is
             // initialized as we do not want to grant the runtime permission
             // setDefaultUncaughtExceptionHandler
+            //通过 Thread.setDefaultUncaughtExceptionHandler 设置了一个 ElasticsearchUncaughtExceptionHandler 未捕获异常处理程序。
+            // Thread.UncaughtExceptionHandler 是当线程由于未捕获的异常而突然终止时调用的处理程序接口。
+            // 在多线程的环境下，主线程无法捕捉其他线程产生的异常，这时需要通过实现 UncaughtExceptionHandler 来捕获其他线程产生但又未被捕获的异常。
             Thread.setDefaultUncaughtExceptionHandler(new ElasticsearchUncaughtExceptionHandler());
 
             //重点：
-            //创建一个节点node，代表一个lucene示例
-            //实例化action，并url，且注册到RestController
+            //创建一个节点node，代表一个lucene实例
+            //各种信息的打印输出和已经丢弃的旧版配置项的检查与提示。
+            //启动插件服务，加载各个插件和模块。
+            //创建节点的运行环境。
+            //创建线程池和 NodeClient 来执行各个Action。
+            //初始化 HTTP Handlers 来处理 REST 请求。
             INSTANCE.setup(true, environment);
 
             try {

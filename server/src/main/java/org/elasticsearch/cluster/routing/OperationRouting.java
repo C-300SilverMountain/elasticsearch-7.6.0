@@ -100,7 +100,8 @@ public class OperationRouting {
     public ShardIterator indexShards(ClusterState clusterState, String index, String id, @Nullable String routing) {
         return shards(clusterState, index, id, routing).shardsIt();
     }
-
+    //getShards 方法中主要调用了 shards 来获取 shardId，然后再根据计算出来的 shardId 从集群元数据的 routing table 中获取存储此文档的 Shard 路由表信息。
+    // 最后再调用 preferenceActiveShardIterator 方法根据 preference（优先级） 参数是否存在分别获取对应的 Shard 列表。
     public ShardIterator getShards(ClusterState clusterState, String index, String id, @Nullable String routing,
                                    @Nullable String preference) {
         return preferenceActiveShardIterator(shards(clusterState, index, id, routing), clusterState.nodes().getLocalNodeId(),
@@ -283,21 +284,29 @@ public class OperationRouting {
     public static int generateShardId(IndexMetaData indexMetaData, @Nullable String id, @Nullable String routing) {
         final String effectiveRouting;
         final int partitionOffset;
-
+        //当 routing 请求参数没有设置的时候，effectiveRouting 的值为文档 id，否则为 routing。
         if (routing == null) {
             assert(indexMetaData.isRoutingPartitionedIndex() == false) : "A routing value is required for gets from a partitioned index";
             effectiveRouting = id;
         } else {
             effectiveRouting = routing;
         }
+        //这里还有一个 partitionOffset 变量需要注意，当我们写入文档的时候，如果使用 ES 的随机 id 和 hash 算法的话，可以保证文档被均匀分配到各个主分片中，避免出现数据倾斜。
+        // 但如果我们使用自定义的文档 id 或者 routing key 的时候，是没法保证的。
+        // 这个时候可以使用 index.routing_partition_size 配置来降低出现数据倾斜的风险，其值越大，数据分布就越均匀
+        // see: https://www.elastic.co/guide/en/elasticsearch/reference/7.13/index-modules.html#routing-partition-size
+        //index.routing_partition_size 取值应大于 1 且小于 index.number_of_shards 的值（请参考文档）
+        //partitionOffset = hash(id) % routing_partition_size
 
+        //为什么增加了 partitionOffset 可以降低出现数据倾斜的风险呢？
+        //partitionOffset 改变了是否会改变计算出的 shardId，或者说 routing_partition_size 改变后会改变 shardId 吗？
         if (indexMetaData.isRoutingPartitionedIndex()) {
             partitionOffset = Math.floorMod(Murmur3HashFunction.hash(id), indexMetaData.getRoutingPartitionSize());
         } else {
             // we would have still got 0 above but this check just saves us an unnecessary hash calculation
             partitionOffset = 0;
         }
-
+        //实际上 ES 是通过文档 Id 或者 routing key 计算出到底要到哪个Shard 上获取数据的。
         return calculateScaledShardId(indexMetaData, effectiveRouting, partitionOffset);
     }
 

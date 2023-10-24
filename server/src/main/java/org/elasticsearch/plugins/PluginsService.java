@@ -109,7 +109,7 @@ public class PluginsService {
     ) {
         this.settings = settings;
         this.configPath = configPath;
-
+        //PluginsService 实例化的过程中主要是加载 modules 目录中的模块和加载 plugins 目录中已经安装的插件。
         List<Tuple<PluginInfo, Plugin>> pluginsLoaded = new ArrayList<>();
         List<PluginInfo> pluginsList = new ArrayList<>();
         // we need to build a List of plugins for checking mandatory plugins
@@ -127,13 +127,13 @@ public class PluginsService {
             pluginsList.add(pluginInfo);
             pluginsNames.add(pluginInfo.getName());
         }
-
+        //模块加载的过程
         Set<Bundle> seenBundles = new LinkedHashSet<>();
         List<PluginInfo> modulesList = new ArrayList<>();
         // load modules
         if (modulesDirectory != null) {
             try {
-                //加载es内部插件，即modules 目录下的jar包
+                //加载es内部插件，即modules 目录下的jar包（注：这里仅是拿到插件的配置参数，并没有做实例化对象）
                 Set<Bundle> modules = getModuleBundles(modulesDirectory);
                 for (Bundle bundle : modules) {
                     modulesList.add(bundle.plugin);
@@ -143,7 +143,7 @@ public class PluginsService {
                 throw new IllegalStateException("Unable to initialize modules", ex);
             }
         }
-
+        //插件的加载过程
         // now, find all the ones that are in plugins/
         if (pluginsDirectory != null) {
             try {

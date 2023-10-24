@@ -573,8 +573,11 @@ public class TransportService extends AbstractLifecycleComponent implements Tran
     public <T extends TransportResponse> void sendRequest(final DiscoveryNode node, final String action,
                                                                 final TransportRequest request,
                                                                 final TransportResponseHandler<T> handler) {
-        try {
+        try {//getConnection 方法会根据节点是否为本地的区别返回一个 Connection 实例
             Transport.Connection connection = getConnection(node);
+            //通过跟踪 sendRequestInternal 方法可以知道，最终处理转发请求的是 connection.sendRequest，
+            // 当节点为本地的时候，connection.sendRequest 调用的是 localNodeConnection 的 sendRequest，而这个方法最终调用的是 sendLocalRequest。
+            // 而当 node 为非本地节点时， connection.sendRequest 调用的的是 TcpTransport.sendRequest，此时会进行发送网络请求到目标节点进行处理。
             sendRequest(connection, action, request, TransportRequestOptions.EMPTY, handler);
         } catch (NodeNotConnectedException ex) {
             // the caller might not handle this so we invoke the handler
@@ -612,7 +615,7 @@ public class TransportService extends AbstractLifecycleComponent implements Tran
      * @throws NodeNotConnectedException if the given node is not connected
      */
     public Transport.Connection getConnection(DiscoveryNode node) {
-        if (isLocalNode(node)) {
+        if (isLocalNode(node)) { //如果为本地节点返回 localNodeConnection，否则在 connectionManager 中获取对应节点的 Connection 实例。
             return localNodeConnection;
         } else {
             return connectionManager.getConnection(node);
@@ -741,6 +744,7 @@ public class TransportService extends AbstractLifecycleComponent implements Tran
             final String executor = reg.getExecutor();
             if (ThreadPool.Names.SAME.equals(executor)) {
                 //noinspection unchecked
+                //从注册了的 RequestHandlerRegistry 中获取对应的处理请求的 TransportRequestHandler，并且执行 messageReceived 处理请求
                 reg.processMessageReceived(request, channel);
             } else {
                 threadPool.executor(executor).execute(new AbstractRunnable() {

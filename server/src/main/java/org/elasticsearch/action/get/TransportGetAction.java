@@ -97,12 +97,13 @@ public class TransportGetAction extends TransportSingleShardAction<GetRequest, G
     @Override
     protected GetResponse shardOperation(GetRequest request, ShardId shardId) {
         IndexService indexService = indicesService.indexServiceSafe(shardId.getIndex());
-        IndexShard indexShard = indexService.getShard(shardId.id());
-
+        IndexShard indexShard = indexService.getShard(shardId.id()); //获取了对应的 IndexShard
+        //检查是否需要进行 refresh 操作
         if (request.refresh() && !request.realtime()) {
+            //see: https://www.elastic.co/guide/en/elasticsearch/reference/7.13/docs-get.html
             indexShard.refresh("refresh_flag_get");
         }
-
+        //indexShard.getService().get 最终调用了 ShardGetService.innerGet 方法：
         GetResult result = indexShard.getService().get(request.type(), request.id(), request.storedFields(),
                 request.realtime(), request.version(), request.versionType(), request.fetchSourceContext());
         return new GetResponse(result);

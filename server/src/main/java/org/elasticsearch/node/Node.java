@@ -271,6 +271,7 @@ public class Node implements Closeable {
      */
     protected Node(
             final Environment environment, Collection<Class<? extends Plugin>> classpathPlugins, boolean forbidPrivateIndexSettings) {
+        //重要：Lifecycle代表节点生命周期，一共有四个状态值
         logger = LogManager.getLogger(Node.class);
         final List<Closeable> resourcesToClose = new ArrayList<>(); // register everything we need to release in the case of an error
         boolean success = false;
@@ -278,13 +279,13 @@ public class Node implements Closeable {
             Settings tmpSettings = Settings.builder().put(environment.settings())
                 .put(Client.CLIENT_TYPE_SETTING_S.getKey(), CLIENT_TYPE).build();
 
-            //准备创建节点所需的参数，且对数据目录加锁
+            //准备创建节点所需的参数值，且对数据目录加锁
             nodeEnvironment = new NodeEnvironment(tmpSettings, environment);
             resourcesToClose.add(nodeEnvironment);
             logger.info("node name [{}], node ID [{}], cluster name [{}]",
                     NODE_NAME_SETTING.get(tmpSettings), nodeEnvironment.nodeId(),
                     ClusterName.CLUSTER_NAME_SETTING.get(tmpSettings).value());
-
+            //各种信息的打印输出和已经丢弃的旧版配置项的检查与提示
             final JvmInfo jvmInfo = JvmInfo.jvmInfo();
             logger.info(
                 "version[{}], pid[{}], build[{}/{}/{}/{}], OS[{}/{}/{}], JVM[{}/{}/{}/{}]",
@@ -313,7 +314,7 @@ public class Node implements Closeable {
                 logger.debug("using config [{}], data [{}], logs [{}], plugins [{}]",
                     environment.configFile(), Arrays.toString(environment.dataFiles()), environment.logsFile(), environment.pluginsFile());
             }
-
+            //创建插件服务。包含modulesDirectory（自带）和pluginsDirectory（用户自定义）
             this.pluginsService = new PluginsService(tmpSettings, environment.configFile(), environment.modulesFile(),
                 environment.pluginsFile(), classpathPlugins);
             final Settings settings = pluginsService.updatedSettings();
@@ -329,11 +330,12 @@ public class Node implements Closeable {
 
             // create the environment based on the finalized (processed) view of the settings
             // this is just to makes sure that people get the same settings, no matter where they ask them from
-            this.environment = new Environment(settings, environment.configFile());
-            Environment.assertEquivalent(environment, this.environment);
+            this.environment = new Environment(settings, environment.configFile()); //创建节点运行需要的运行环境
+            Environment.assertEquivalent(environment, this.environment); //通过 Environment.assertEquivalent 函数来保证启动过程中配置没有被更改。
 
             final List<ExecutorBuilder<?>> executorBuilders = pluginsService.getExecutorBuilders(settings);
-
+            //ES 线程池。 ThreadPool 中定义了 4 中线程池类型
+            // see: https://www.elastic.co/guide/en/elasticsearch/reference/7.13/modules-threadpool.html#fixed-thread-pool
             final ThreadPool threadPool = new ThreadPool(settings, executorBuilders.toArray(new ExecutorBuilder[0]));
             resourcesToClose.add(() -> ThreadPool.terminate(threadPool, 10, TimeUnit.SECONDS));
             // adds the context to the DeprecationLogger so that it does not need to be injected everywhere
@@ -345,8 +347,9 @@ public class Node implements Closeable {
             for (final ExecutorBuilder<?> builder : threadPool.builders()) {
                 additionalSettings.addAll(builder.getRegisteredSettings());
             }
-            client = new NodeClient(settings, threadPool);
+            client = new NodeClient(settings, threadPool);//NodeClient 用于执行本地的 actions 的，并且各个节点间的交互是通过 NodeClient 来进行的。
             final ResourceWatcherService resourceWatcherService = new ResourceWatcherService(settings, threadPool);
+            //创建各个模块和服务
             final ScriptModule scriptModule = new ScriptModule(settings, pluginsService.filterPlugins(ScriptPlugin.class));
             AnalysisModule analysisModule = new AnalysisModule(this.environment, pluginsService.filterPlugins(AnalysisPlugin.class));
             // this is as early as we can validate settings at this point. we already pass them to ScriptModule as well as ThreadPool
@@ -540,6 +543,8 @@ public class Node implements Closeable {
             resourcesToClose.add(persistentTasksClusterService);
             final PersistentTasksService persistentTasksService = new PersistentTasksService(clusterService, threadPool, client);
 
+            //绑定对应的对象到 Guice
+            //ES 用到了 Guice 这个谷歌提供的轻量级 IOC 库，bind 和 createInjector 是其提供的基本功能。
             modules.add(b -> {
                     b.bind(Node.class).toInstance(this);
                     b.bind(NodeService.class).toInstance(nodeService);
@@ -597,6 +602,7 @@ public class Node implements Closeable {
                     b.bind(RerouteService.class).toInstance(rerouteService);
                 }
             );
+            //将已经实例化的对象绑定到 ModulesBuilder中，最后调用 modules.createInjector 创建 injector（注入器）。
             injector = modules.createInjector();
 
             // TODO hack around circular dependencies problems in AllocationService
@@ -613,7 +619,8 @@ public class Node implements Closeable {
             client.initialize(injector.getInstance(new Key<Map<ActionType, TransportAction>>() {}), transportService.getTaskManager(),
                     () -> clusterService.localNode().getId(), transportService.getRemoteClusterService());
 
-            //重点：
+            //重点：初始化 HTTP Handler
+            //在这里主要是注册一堆 RestHandler，例如获取节点状态的 API 是在 RestNodesStatsAction 中定义的：
             //将action注册到RestController(分发器)
             //一个地址对应一个action，如http://localhost:9200/_cat/health 交给 RestHealthActiov处理。。。
             logger.debug("initializing HTTP handlers ...");
@@ -677,38 +684,40 @@ public class Node implements Closeable {
         if (!lifecycle.moveToStarted()) {
             return this;
         }
-
+        //injector: 谷歌提供的轻量级 IOC 库
         logger.info("starting ...");
         pluginLifecycleComponents.forEach(LifecycleComponent::start);
-
+        // see: https://www.lishuo.net/read/elasticsearch/date-2023.05.24.16.58.21
         injector.getInstance(MappingUpdatedAction.class).setClient(client);
-        injector.getInstance(IndicesService.class).start();
-        injector.getInstance(IndicesClusterStateService.class).start();
-        injector.getInstance(SnapshotsService.class).start();
-        injector.getInstance(SnapshotShardsService.class).start();
-        injector.getInstance(RepositoriesService.class).start();
-        injector.getInstance(SearchService.class).start();
-        nodeService.getMonitorService().start();
+        injector.getInstance(IndicesService.class).start(); //负责索引管理，如创建、删除等操作。
+        injector.getInstance(IndicesClusterStateService.class).start(); //负责根据各种集群索引状态信息进行相应的操作，如创建或者恢复索引（这些实际的操作会交给具体的模块实现）等。
+        injector.getInstance(SnapshotsService.class).start(); //负责创建快照，在执行快照创建和删除的时候，所有的执行步骤都在主节点上=进行。
+        injector.getInstance(SnapshotShardsService.class).start(); //此服务在 data node 上运行，并且控制此节点上运行中的分片快照。其负责开启和停止分片级别的快照。
+        injector.getInstance(RepositoriesService.class).start(); // 负责维护节点快照存储仓库和提供对存储仓库的访问。
+        injector.getInstance(SearchService.class).start(); //提供搜索支持的服务。
+        nodeService.getMonitorService().start(); //负责提供操作系统、进程、JVM、文件系统级别的监控服务
 
-        final ClusterService clusterService = injector.getInstance(ClusterService.class);
-
+        final ClusterService clusterService = injector.getInstance(ClusterService.class); // 集群管理服务，负责管理集群状态、处理集群任务、发布集群状态等。
+        //该组件负责维护从该节点到集群状态中列出的所有节点的连接，并在节点从集群状态中删除后断开与节点的连接。
+        // 并且会定期检查所有链接是否在打开状态，并且在需要的时候恢复它们。需要注意的是此组件不负责移除节点！
         final NodeConnectionsService nodeConnectionsService = injector.getInstance(NodeConnectionsService.class);
         nodeConnectionsService.start();
-        clusterService.setNodeConnectionsService(nodeConnectionsService);
+        clusterService.setNodeConnectionsService(nodeConnectionsService); //将 NodeConnectionsService 绑定到 ClusterService 中去
 
         injector.getInstance(ResourceWatcherService.class).start();
-        injector.getInstance(GatewayService.class).start();
+        injector.getInstance(GatewayService.class).start(); //网关服务，负责集群元数据的持久化和恢复。
+        //节点发现模块是一个可插拔的模块，其负责发现集群中其他的节点，发布集群状态到所有节点，选举主节点和发布集群状态变更事件。
         Discovery discovery = injector.getInstance(Discovery.class);
         clusterService.getMasterService().setClusterStatePublisher(discovery::publish);
 
         // Start the transport service now so the publish address will be added to the local disco node in ClusterService
-        TransportService transportService = injector.getInstance(TransportService.class);
+        TransportService transportService = injector.getInstance(TransportService.class); // 负责节点间数据同步。
         transportService.getTaskManager().setTaskResultsService(injector.getInstance(TaskResultsService.class));
         transportService.start();
         assert localNodeFactory.getNode() != null;
         assert transportService.getLocalNode().equals(localNodeFactory.getNode())
             : "transportService has a different local node than the factory provided";
-        injector.getInstance(PeerRecoverySourceService.class).start();
+        injector.getInstance(PeerRecoverySourceService.class).start();//负责处理对等分片的恢复请求，并且开启从这个源分片到目标分片的恢复流程。
 
         // Load (and maybe upgrade) the metadata stored on disk
         final GatewayMetaState gatewayMetaState = injector.getInstance(GatewayMetaState.class);
@@ -744,11 +753,11 @@ public class Node implements Closeable {
         clusterService.start();
         assert clusterService.localNode().equals(localNodeFactory.getNode())
             : "clusterService has a different local node than the factory provided";
-        transportService.acceptIncomingRequests();
-        discovery.startInitialJoin();
+        transportService.acceptIncomingRequests(); //尝试接收请求。
+        discovery.startInitialJoin(); // 开始进行加入集群的循环。
         final TimeValue initialStateTimeout = DiscoverySettings.INITIAL_STATE_TIMEOUT_SETTING.get(settings());
         configureNodeAndClusterIdStateListener(clusterService);
-
+        //开启线程去检查是否有开源加入的集群：
         if (initialStateTimeout.millis() > 0) {
             final ThreadPool thread = injector.getInstance(ThreadPool.class);
             ClusterState clusterState = clusterService.state();
@@ -757,7 +766,7 @@ public class Node implements Closeable {
 
             if (clusterState.nodes().getMasterNodeId() == null) {
                 logger.debug("waiting to join the cluster. timeout [{}]", initialStateTimeout);
-                final CountDownLatch latch = new CountDownLatch(1);
+                final CountDownLatch latch = new CountDownLatch(1); //这里使用一个 CountDownLatch 来等待加入集群的结果。
                 observer.waitForNextChange(new ClusterStateObserver.Listener() {
                     @Override
                     public void onNewClusterState(ClusterState state) { latch.countDown(); }
@@ -782,7 +791,7 @@ public class Node implements Closeable {
                 }
             }
         }
-
+        //提供 REST 接口服务。开启 HttpServerTransport，并且绑定监听地址，接收 REST 请求。
         injector.getInstance(HttpServerTransport.class).start();
 
         if (WRITE_PORTS_FILE_SETTING.get(settings())) {
@@ -792,8 +801,9 @@ public class Node implements Closeable {
             writePortsFile("http", http.boundAddress());
         }
 
-        logger.info("started");
-
+        logger.info("started"); //好了，到此整个节点的启动已经完成了，如果顺利，将会看到以下的输出：
+        //[2022-05-16T11:56:32,972][INFO ][o.e.n.Node] [node-1] started
+        //see: https://www.lishuo.net/read/elasticsearch/date-2023.05.24.16.58.21
         pluginsService.filterPlugins(ClusterPlugin.class).forEach(ClusterPlugin::onNodeStarted);
 
         return this;

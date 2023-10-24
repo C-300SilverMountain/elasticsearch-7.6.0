@@ -41,7 +41,7 @@ import static org.elasticsearch.index.seqno.SequenceNumbers.UNASSIGNED_SEQ_NO;
 public interface DocWriteRequest<T> extends IndicesRequest {
 
     /**
-     * Set the index for this request
+     * Set the index for this request.
      * @return the Request
      */
     T index(String index);
@@ -164,19 +164,19 @@ public interface DocWriteRequest<T> extends IndicesRequest {
      * Requested operation type to perform on the document
      */
     enum OpType {
-        /**
+        /**索引一个文档，如果文档存在替换它。
          * Index the source. If there an existing document with the id, it will
          * be replaced.
          */
         INDEX(0),
-        /**
+        /**创建文档，put 请求时通过 op_type 参数指定类型为 create 即可。如果文档已经存在，请求会失败。
          * Creates the resource. Simply adds it to the index, if there is an existing
          * document with the id, then it won't be removed.
          */
         CREATE(1),
-        /** Updates a document */
+        /** Updates a document 更新文档。 */
         UPDATE(2),
-        /** Deletes a document */
+        /** Deletes a document 删除文档。 */
         DELETE(3);
 
         private final byte op;

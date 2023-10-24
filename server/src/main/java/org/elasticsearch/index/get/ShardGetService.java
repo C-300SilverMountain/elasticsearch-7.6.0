@@ -169,6 +169,7 @@ public final class ShardGetService extends AbstractIndexShardComponent {
     private GetResult innerGet(String type, String id, String[] gFields, boolean realtime, long version, VersionType versionType,
                                long ifSeqNo, long ifPrimaryTerm, FetchSourceContext fetchSourceContext) {
         fetchSourceContext = normalizeFetchSourceContent(fetchSourceContext, gFields);
+        //innerGet 先处理了 type，在 ES 7 之后的版本里，type 统一为 “_doc” 了。
         if (type == null || type.equals("_all")) {
             DocumentMapper mapper = mapperService.documentMapper();
             type = mapper == null ? null : mapper.type();
@@ -176,7 +177,10 @@ public final class ShardGetService extends AbstractIndexShardComponent {
 
         Engine.GetResult get = null;
         if (type != null) {
+            //构造 uidTerm，这里要注意 Term 构造跟文档的 id 相关，这个 uidTerm 我们后面会用到
             Term uidTerm = new Term(IdFieldMapper.NAME, Uid.encodeId(id));
+            //通过调用 indexShard.get 方法获取文档内容，此处的 version、SeqNo、PrimaryTerm 我们在之前的章节中都有提到的。
+            // indexShard.get 方法最终调用了 InternalEngine.get 方法。
             get = indexShard.get(new Engine.Get(realtime, realtime, type, id, uidTerm)
                 .version(version).versionType(versionType).setIfSeqNo(ifSeqNo).setIfPrimaryTerm(ifPrimaryTerm));
             assert get.isFromTranslog() == false || realtime : "should only read from translog if realtime enabled";
@@ -185,6 +189,8 @@ public final class ShardGetService extends AbstractIndexShardComponent {
             }
         }
 
+        //如果结果为 null 返回一个空结果，否则调用 innerGetLoadFromStoredFields 方法从返回的 Engine.GetResult 实例中获取结果并且过滤相关的字段，
+        // 并且将结果保存在 org.elasticsearch.index.get.GetResult 实例中（注意这是两个同名的 GetResult 类，但 实现不同）。
         if (get == null || get.exists() == false) {
             return new GetResult(shardId.getIndexName(), type, id, UNASSIGNED_SEQ_NO, UNASSIGNED_PRIMARY_TERM, -1, false, null, null, null);
         }

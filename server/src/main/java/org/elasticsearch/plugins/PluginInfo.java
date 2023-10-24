@@ -149,7 +149,8 @@ public class PluginInfo implements Writeable, ToXContentObject {
      */
     public static PluginInfo readFromProperties(final Path path) throws IOException {
         final Path descriptor = path.resolve(ES_PLUGIN_PROPERTIES);
-
+        //读取 plugin-descriptor.properties 文件中的配置模板加载模块。
+        //配置的内容主要包括：type、description、version、name、classname 等信息，根据这些信息最终封装成为一个 PluginInfo 实例
         final Map<String, String> propsMap;
         {
             final Properties props = new Properties();

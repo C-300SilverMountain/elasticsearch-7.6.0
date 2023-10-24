@@ -63,6 +63,7 @@ public class ThreadPool implements Scheduler {
 
     private static final Logger logger = LogManager.getLogger(ThreadPool.class);
 
+    //ThreadPool 中还创建了多个线程池，主要有以下这些：
     public static class Names {
         public static final String SAME = "same";
         public static final String GENERIC = "generic";
@@ -83,6 +84,11 @@ public class ThreadPool implements Scheduler {
     }
 
     public enum ThreadPoolType {
+        //direct，执行器不支持关闭的线程。
+        //fixed，线程池拥有固定数量的线程，当一个任务无法分配一条线程时会被排队处理。
+        //fixed_auto_queue_size，和 fixed 类似，但是任务队列会根据 Little’s Law 自动调整。8.0 后将被移除。
+        //scaling， 线程池中线程的数量可变，线程的数量在 core 和 max 间变化，使用 keep_alive 参数可以控制线程在线程池中的空闲时间。
+
         DIRECT("direct"),
         FIXED("fixed"),
         FIXED_AUTO_QUEUE_SIZE("fixed_auto_queue_size"),

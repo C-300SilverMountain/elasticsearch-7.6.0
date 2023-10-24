@@ -649,27 +649,40 @@ public class InternalEngine extends Engine {
             }
         }
     }
-
+    //see: https://www.lishuo.net/read/elasticsearch/date-2023.05.24.16.58.29
     @Override
     public GetResult get(Get get, BiFunction<String, SearcherScope, Engine.Searcher> searcherFactory) throws EngineException {
         assert Objects.equals(get.uid().field(), IdFieldMapper.NAME) : get.uid().field();
+        //先获取读锁 readLock
         try (ReleasableLock ignored = readLock.acquire()) {
             ensureOpen();
             SearcherScope scope;
+            ////判断是否为实时获取文档内容
             if (get.realtime()) {
                 VersionValue versionValue = null;
+                //versionMap中的值是在索引数据时写入的，并不会保存到磁盘中
+                //首先对 versionMap 加锁，然后从 versionMap 中文档的 versionValue，其中获取 versionValue 时使用的 key 为 get.uid()，
+                // 其为上面提到过的 uidTerm。versionMap 你可以简单的认为是文档 id 与 VersionValue 组成的 Map，
+                // 其保存在内存中，不会写入到磁盘上，当执行 refresh 成功后会被清理。
                 try (Releasable ignore = versionMap.acquireLock(get.uid().bytes())) {
                     // we need to lock here to access the version map to do this truly in RT
                     versionValue = getVersionFromMap(get.uid().bytes());
                 }
+                //那为什么 versionMap 不需要保存到磁盘上呢？其实很好理解，当 refresh 成功后，这些数据都已经持久化了，此时如果 Get 一个文档，
+                // 那么其 versionValue 是空的，说明这个文档的数据已经持久化了，直接读磁盘即可，此时就已经是实时的了。
+                // 所以 refresh 成功后 versionMap 可以清空，也可以避免消耗过多的内存。
+                // 而当系统启动时会进行恢复的流程，需要持久化的数据也会持久化到磁盘中，所以系统启动后（此文档还没有写操作），此时发生 Get 请求获取文档数据也是实时的。
                 if (versionValue != null) {
+                    //如果标志删除了，返回404
                     if (versionValue.isDelete()) {
                         return GetResult.NOT_EXISTS;
                     }
+                    //检查 版本 是否符合要求
                     if (get.versionType().isVersionConflictForReads(versionValue.version, get.version())) {
                         throw new VersionConflictEngineException(shardId, get.id(),
                             get.versionType().explainConflictForReads(versionValue.version, get.version()));
                     }
+                    //检查SeqNo 和 PrimaryTerm 是否符合要求
                     if (get.getIfSeqNo() != SequenceNumbers.UNASSIGNED_SEQ_NO && (
                         get.getIfSeqNo() != versionValue.seqNo || get.getIfPrimaryTerm() != versionValue.term
                         )) {
@@ -699,6 +712,7 @@ public class InternalEngine extends Engine {
                             trackTranslogLocation.set(true);
                         }
                     }
+                    //最后调用 refreshIfNeeded 执行 refresh 操作：
                     assert versionValue.seqNo >= 0 : versionValue;
                     refreshIfNeeded("realtime_get", versionValue.seqNo);
                 }
@@ -707,8 +721,11 @@ public class InternalEngine extends Engine {
                 // we expose what has been externally expose in a point in time snapshot via an explicit refresh
                 scope = SearcherScope.EXTERNAL;
             }
-
+            //所以，Get API 默认的情况下是实时的，系统通过进行 refresh 操作来保证 Get API 的实时性。
             // no version, get the version from the index, we know that we refresh on flush
+            //两个问题:
+            //如果我们写入数据后马上使用 Get API 获取数据可以获取到吗？答案是可以的，系统通过 refresh 操作来保证 Get API 的实时性。
+            //系统是如何确定该到哪个 Shard 上找文档内容的呢？系统通过文档 id 和 routing key 参数来计算确定该到哪个 Shard 上获取数据。
             return getFromSearcher(get, searcherFactory, scope);
         }
     }
@@ -2746,6 +2763,10 @@ public class InternalEngine extends Engine {
 
     /**
      * Refresh this engine **internally** iff the requesting seq_no is greater than the last refreshed checkpoint.
+     * 并不是每次都执行 refresh 操作的，只有 lastRefreshedCheckpoint < requestingSeqNo 才会执行 refresh 操作，所以这个 lastRefreshedCheckpoint 其实应该与 SeqNo 相关的
+     * 那为什么要判断 lastRefreshedCheckpoint < requestingSeqNo 这个条件两次，并且加锁呢？
+     * 其实跟多线程操作有关，细想一下就知道，在加锁后再次判断条件时有可能不成立了，因为可能有其它线程已经执行了 refresh，所以需要再判断一次。
+     * 那不做第一次判断可以吗？我个人觉得可以，我觉得这里应该是为了提高效率才这样做的。
      */
     protected final void refreshIfNeeded(String source, long requestingSeqNo) {
         if (lastRefreshedCheckpoint() < requestingSeqNo) {

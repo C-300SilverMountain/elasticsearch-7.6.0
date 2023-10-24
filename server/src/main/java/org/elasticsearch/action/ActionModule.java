@@ -573,6 +573,7 @@ public class ActionModule extends AbstractModule {
             }
         };
         //Action构造函数内部，执行注册逻辑
+        //通过 accept 方法，各个 RestAction 都被注册到 restController，Rest 请求都在 restController 中被处理。
         registerHandler.accept(new RestAddVotingConfigExclusionAction(restController));
         registerHandler.accept(new RestClearVotingConfigExclusionsAction(restController));
         registerHandler.accept(new RestMainAction(restController));
