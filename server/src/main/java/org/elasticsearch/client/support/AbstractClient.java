@@ -491,7 +491,7 @@ public abstract class AbstractClient implements Client {
 
     @Override
     public void get(final GetRequest request, final ActionListener<GetResponse> listener) {
-        execute(GetAction.INSTANCE, request, listener);
+        execute(GetAction.INSTANCE, request, listener); //指定ActionType，后续根据ActionType获取对应的action实例
     }
 
     @Override

@@ -53,39 +53,55 @@ public class HierarchyCircuitBreakerService extends CircuitBreakerService {
 
     private final ConcurrentMap<String, CircuitBreaker> breakers = new ConcurrentHashMap<>();
 
+    /**
+     * 父断路器是否应考虑实际内存使用情况(true) 还是仅考虑子断路器保留的内存量(false)。默认为true。
+     */
     public static final Setting<Boolean> USE_REAL_MEMORY_USAGE_SETTING =
         Setting.boolSetting("indices.breaker.total.use_real_memory", true, Property.NodeScope);
 
     public static final Setting<ByteSizeValue> TOTAL_CIRCUIT_BREAKER_LIMIT_SETTING =
         Setting.memorySizeSetting("indices.breaker.total.limit", settings -> {
             if (USE_REAL_MEMORY_USAGE_SETTING.get(settings)) {
-                return "95%";
+                return "95%"; // JVM 堆的 95%
             } else {
-                return "70%";
+                return "70%"; // JVM 堆的 70%
             }
         }, Property.Dynamic, Property.NodeScope);
 
+    /**
+     * 字段数据断路器估计将字段加载到字段数据缓存所需的堆内存。如果加载字段会导致缓存超出预定义的内存限制，则断路器会停止操作并返回错误。
+     * 字段数据断路器的限制。默认为 JVM 堆的 40%。
+     */
     public static final Setting<ByteSizeValue> FIELDDATA_CIRCUIT_BREAKER_LIMIT_SETTING =
         Setting.memorySizeSetting("indices.breaker.fielddata.limit", "40%", Property.Dynamic, Property.NodeScope);
+    /**
+     * 所有字段数据估计值相乘以确定最终估计值的常量。默认为1.03.
+     */
     public static final Setting<Double> FIELDDATA_CIRCUIT_BREAKER_OVERHEAD_SETTING =
         Setting.doubleSetting("indices.breaker.fielddata.overhead", 1.03d, 0.0d, Property.Dynamic, Property.NodeScope);
     public static final Setting<CircuitBreaker.Type> FIELDDATA_CIRCUIT_BREAKER_TYPE_SETTING =
         new Setting<>("indices.breaker.fielddata.type", "memory", CircuitBreaker.Type::parseValue, Property.NodeScope);
-
+    //用户请求（RestRequest）断路器允许 Elasticsearch 防止每个请求的数据结构（例如，在请求期间用于计算聚合的内存）超过一定的内存量
+    //请求断路器的限制，默认为 JVM 堆的 60%
     public static final Setting<ByteSizeValue> REQUEST_CIRCUIT_BREAKER_LIMIT_SETTING =
         Setting.memorySizeSetting("indices.breaker.request.limit", "60%", Property.Dynamic, Property.NodeScope);
+    //所有请求估计值相乘以确定最终估计值的常量。默认为1.
     public static final Setting<Double> REQUEST_CIRCUIT_BREAKER_OVERHEAD_SETTING =
         Setting.doubleSetting("indices.breaker.request.overhead", 1.0d, 0.0d, Property.Dynamic, Property.NodeScope);
     public static final Setting<CircuitBreaker.Type> REQUEST_CIRCUIT_BREAKER_TYPE_SETTING =
         new Setting<>("indices.breaker.request.type", "memory", CircuitBreaker.Type::parseValue, Property.NodeScope);
-
+    //会计断路器允许 Elasticsearch 限制内存中保存的事物的内存使用量，这些事物在请求完成时不会释放。这包括 Lucene 段内存之类的东西。
+    //会计断路器的限制，默认为 JVM 堆的 100%。这意味着它受到为父断路器配置的限制的约束。
     public static final Setting<ByteSizeValue> ACCOUNTING_CIRCUIT_BREAKER_LIMIT_SETTING =
         Setting.memorySizeSetting("indices.breaker.accounting.limit", "100%", Property.Dynamic, Property.NodeScope);
+    //所有会计估计相乘以确定最终估计的常数。默认为 1
     public static final Setting<Double> ACCOUNTING_CIRCUIT_BREAKER_OVERHEAD_SETTING =
         Setting.doubleSetting("indices.breaker.accounting.overhead", 1.0d, 0.0d, Property.Dynamic, Property.NodeScope);
     public static final Setting<CircuitBreaker.Type> ACCOUNTING_CIRCUIT_BREAKER_TYPE_SETTING =
         new Setting<>("indices.breaker.accounting.type", "memory", CircuitBreaker.Type::parseValue, Property.NodeScope);
-
+    // 飞行中请求断路器允许 Elasticsearch 限制传输或 HTTP 级别上所有当前活动传入请求的内存使用量，以免超过节点上的特定内存量。
+    // 内存使用量基于请求本身的内容长度。该断路器还认为内存不仅需要用于表示原始请求，而且还需要作为默认开销反映的结构化对象。
+    // 如何理解？请求断路器针对的是：用户请求，即RestRequest。而飞行请求断路器针对的所有请求，包含集群内数据交互，即TCP交互请求（内部）和 http交互请求（外部）
     public static final Setting<ByteSizeValue> IN_FLIGHT_REQUESTS_CIRCUIT_BREAKER_LIMIT_SETTING =
         Setting.memorySizeSetting("network.breaker.inflight_requests.limit", "100%", Property.Dynamic, Property.NodeScope);
     public static final Setting<Double> IN_FLIGHT_REQUESTS_CIRCUIT_BREAKER_OVERHEAD_SETTING =

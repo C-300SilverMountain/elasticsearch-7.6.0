@@ -60,7 +60,7 @@ node.name: node-1
 network.host: localhost
 #
 # Set a custom port for HTTP:
-#
+# 监听的 http.port 是用来接收客户端请求的，而监听 transport.port 是用来与集群中其他节点通信用的。
 #http.port: 9200
 #
 # For more information, consult the network module documentation.

@@ -62,7 +62,7 @@ public class NodeClient extends AbstractClient {
     public NodeClient(Settings settings, ThreadPool threadPool) {
         super(settings, threadPool);
     }
-
+    //创建Node节点时，触发此函数，并传入actions列表
     public void initialize(Map<ActionType, TransportAction> actions, TaskManager taskManager, Supplier<String> localNodeId,
                            RemoteClusterService remoteClusterService) {
         this.actions = actions;
@@ -154,6 +154,7 @@ public class NodeClient extends AbstractClient {
         if (actions == null) {
             throw new IllegalStateException("NodeClient has not been initialized");
         }
+        //actions再创建Node实例时，先实例化ActionModule，执行setupActions，得到actions列表
         TransportAction<Request, Response> transportAction = actions.get(action);
         if (transportAction == null) {
             throw new IllegalStateException("failed to find action [" + action + "] to execute");

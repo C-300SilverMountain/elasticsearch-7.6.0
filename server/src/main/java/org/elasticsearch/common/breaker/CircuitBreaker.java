@@ -98,7 +98,7 @@ public interface CircuitBreaker {
     void circuitBreak(String fieldName, long bytesNeeded);
 
     /**
-     * add bytes to the breaker and maybe trip
+     * add bytes to the breaker and maybe trip 调整断路器可能会跳闸（内存爆就跳闸）
      * @param bytes number of bytes to add
      * @param label string label describing the bytes being added
      * @return the number of "used" bytes for the circuit breaker
@@ -106,7 +106,7 @@ public interface CircuitBreaker {
     double addEstimateBytesAndMaybeBreak(long bytes, String label) throws CircuitBreakingException;
 
     /**
-     * Adjust the circuit breaker without tripping
+     * Adjust the circuit breaker without tripping 调整断路器但不跳闸
      */
     long addWithoutBreaking(long bytes);
 

@@ -61,6 +61,10 @@ import static org.elasticsearch.rest.RestStatus.METHOD_NOT_ALLOWED;
 import static org.elasticsearch.rest.RestStatus.NOT_ACCEPTABLE;
 import static org.elasticsearch.rest.RestStatus.OK;
 
+/**
+ * RestController用于分发所有请求，通过uri定位到Rest*Action，Rest*Action再将请求转化为集群内部Transport*Action操作
+ * RestController（分发） --> Rest*Action（转换成集群内操作） --> Transport*Action（集群操作）
+ */
 public class RestController implements HttpServerTransport.Dispatcher {
 
     private static final Logger logger = LogManager.getLogger(RestController.class);
@@ -213,7 +217,7 @@ public class RestController implements HttpServerTransport.Dispatcher {
         }
         RestChannel responseChannel = channel;
         try {
-            if (handler.canTripCircuitBreaker()) {//请求级别断路器：检查当前内存使用情况，如大于阈值，则直接返回空值
+            if (handler.canTripCircuitBreaker()) {//请求级别断路器：检查当前内存使用情况，如大于阈值，则直接返回空值，降低OOM风险
                 inFlightRequestsBreaker(circuitBreakerService).addEstimateBytesAndMaybeBreak(contentLength, "<http_request>");
             } else {
                 inFlightRequestsBreaker(circuitBreakerService).addWithoutBreaking(contentLength);
@@ -292,6 +296,7 @@ public class RestController implements HttpServerTransport.Dispatcher {
             // Resolves the HTTP method and fails if the method is invalid
             requestMethod = request.method();
             // Loop through all possible handlers, attempting to dispatch the request
+            //通过前缀树获取uri对应的Rest*Action，即RestHandler
             Iterator<MethodHandlers> allHandlers = getAllHandlers(request.params(), rawPath);
             while (allHandlers.hasNext()) {
                 final RestHandler handler;

@@ -60,6 +60,10 @@ public abstract class TransportAction<Request extends ActionRequest, Response ex
          * task. That just seems like too many objects. Thus the two versions of
          * this method.
          */
+        //任务管理机制：用于跟踪节点上正在运行的任务。(5.0开始推出)
+        //see:
+        // https://github.com/elastic/elasticsearch/issues/15117
+        // https://www.jianshu.com/p/b8c87cdca082
         Task task = taskManager.register("transport", actionName, request);
         execute(task, request, new ActionListener<Response>() {
             @Override
@@ -74,7 +78,7 @@ public abstract class TransportAction<Request extends ActionRequest, Response ex
             @Override
             public void onFailure(Exception e) {
                 try {
-                    taskManager.unregister(task);
+                    taskManager.unregister(task); //处理响应或者异常失败时会注销任务
                 } finally {
                     listener.onFailure(e);
                 }

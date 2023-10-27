@@ -148,6 +148,7 @@ public abstract class TransportSingleShardAction<Request extends SingleShardRequ
             if (logger.isTraceEnabled()) {
                 logger.trace("executing [{}] based on cluster state version [{}]", request, clusterState.version());
             }
+            //从ClusterState中获取集群内【所有节点】列表
             nodes = clusterState.nodes();
             ClusterBlockException blockException = checkGlobalBlock(clusterState); //检查是否全局读阻塞，如果是读阻塞则抛出异常
             if (blockException != null) {
@@ -162,13 +163,13 @@ public abstract class TransportSingleShardAction<Request extends SingleShardRequ
             }
             this.internalRequest = new InternalRequest(request, concreteSingleIndex);
             resolveRequest(clusterState, internalRequest); //解析请求，更新指定的 routing。
-
-            blockException = checkRequestBlock(clusterState, internalRequest); //再次检查请求是否读阻塞，如果是读阻塞则抛出异常。
+            //再次检查请求是否读阻塞，如果是读阻塞则抛出异常。
+            blockException = checkRequestBlock(clusterState, internalRequest);
             if (blockException != null) {
                 throw blockException;
             }
-
-            this.shardIt = shards(clusterState, internalRequest); //根据路由算法或者优先级参数（preference）选择出对应的分片列表（一个迭代器）
+            //根据路由算法或者优先级参数（preference）选择出对应的分片列表（一个迭代器）
+            this.shardIt = shards(clusterState, internalRequest);
         }
 
         public void start() {
