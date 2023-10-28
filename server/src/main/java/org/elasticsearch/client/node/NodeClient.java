@@ -91,7 +91,7 @@ public class NodeClient extends AbstractClient {
     public <    Request extends ActionRequest,
                 Response extends ActionResponse
             > Task executeLocally(ActionType<Response> action, Request request, ActionListener<Response> listener) {
-        return transportAction(action).execute(request, listener);
+        return transportAction(action).execute(request, listener); //拿到对应的TransportAction，进行调用
     }
 
     /**
@@ -154,7 +154,7 @@ public class NodeClient extends AbstractClient {
         if (actions == null) {
             throw new IllegalStateException("NodeClient has not been initialized");
         }
-        //actions再创建Node实例时，先实例化ActionModule，执行setupActions，得到actions列表
+        //actions再创建Node实例时，先实例化ActionModule，执行setupActions，得到TransportAction列表
         TransportAction<Request, Response> transportAction = actions.get(action);
         if (transportAction == null) {
             throw new IllegalStateException("failed to find action [" + action + "] to execute");

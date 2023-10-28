@@ -93,6 +93,7 @@ public class RestGetAction extends BaseRestHandler {
         getRequest.fetchSourceContext(FetchSourceContext.parseFromRestRequest(request));
 
         return channel -> client.get(getRequest, new RestToXContentListener<GetResponse>(channel) {
+            // RestToXContentListener：接收ACK，仅代表发送出去成功，并没有真正拿到数据。
             @Override
             protected RestStatus getStatus(final GetResponse response) {
                 return response.isExists() ? OK : NOT_FOUND;

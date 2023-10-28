@@ -60,6 +60,7 @@ public abstract class TransportAction<Request extends ActionRequest, Response ex
          * task. That just seems like too many objects. Thus the two versions of
          * this method.
          */
+        //可观测机制，即随时随地能观察到ES内部的工作情况
         //任务管理机制：用于跟踪节点上正在运行的任务。(5.0开始推出)
         //see:
         // https://github.com/elastic/elasticsearch/issues/15117
@@ -68,7 +69,7 @@ public abstract class TransportAction<Request extends ActionRequest, Response ex
         execute(task, request, new ActionListener<Response>() {
             @Override
             public void onResponse(Response response) {
-                try {
+                try { //这里拿到的仅是ACK，代表发送出去了，并没有得到真实数据
                     taskManager.unregister(task);
                 } finally {
                     listener.onResponse(response);
@@ -119,7 +120,7 @@ public abstract class TransportAction<Request extends ActionRequest, Response ex
      * Use this method when the transport action should continue to run in the context of the current task
      */
     public final void execute(Task task, Request request, ActionListener<Response> listener) {
-        ActionRequestValidationException validationException = request.validate();
+        ActionRequestValidationException validationException = request.validate(); //数据验证，不同类型的请求验证不同，模版模式
         if (validationException != null) {
             listener.onFailure(validationException);
             return;
@@ -128,7 +129,7 @@ public abstract class TransportAction<Request extends ActionRequest, Response ex
         if (task != null && request.getShouldStoreResult()) {
             listener = new TaskResultStoringActionListener<>(taskManager, task, listener);
         }
-
+        //链式调用
         RequestFilterChain<Request, Response> requestFilterChain = new RequestFilterChain<>(this, logger);
         requestFilterChain.proceed(task, actionName, request, listener);
     }
@@ -154,7 +155,7 @@ public abstract class TransportAction<Request extends ActionRequest, Response ex
                 if (i < this.action.filters.length) {
                     this.action.filters[i].apply(task, actionName, request, listener, this);
                 } else if (i == this.action.filters.length) {
-                    this.action.doExecute(task, request, listener);
+                    this.action.doExecute(task, request, listener); //执行Transport*Action.doExecute，如TransportGetAction
                 } else {
                     listener.onFailure(new IllegalStateException("proceed was called too many times"));
                 }

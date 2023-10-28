@@ -55,6 +55,7 @@ import java.io.IOException;
 import static org.elasticsearch.action.support.TransportActions.isShardNotAvailableException;
 
 /**
+ * 从单个分片读取数据，通过针对的是：通过ID获取数据的场景。如TransportGetAction，根据ID获取单条数据，就继承了此类
  * A base class for operations that need to perform a read operation on a single shard copy. If the operation fails,
  * the read operation can be performed on other shard copies. Concrete implementations can provide their own list
  * of candidate shards to try the read operation on.
@@ -150,7 +151,8 @@ public abstract class TransportSingleShardAction<Request extends SingleShardRequ
             }
             //从ClusterState中获取集群内【所有节点】列表
             nodes = clusterState.nodes();
-            ClusterBlockException blockException = checkGlobalBlock(clusterState); //检查是否全局读阻塞，如果是读阻塞则抛出异常
+            //检查是否全局读阻塞，如果是读阻塞则抛出异常，Why?
+            ClusterBlockException blockException = checkGlobalBlock(clusterState);
             if (blockException != null) {
                 throw blockException;
             }
@@ -163,7 +165,7 @@ public abstract class TransportSingleShardAction<Request extends SingleShardRequ
             }
             this.internalRequest = new InternalRequest(request, concreteSingleIndex);
             resolveRequest(clusterState, internalRequest); //解析请求，更新指定的 routing。
-            //再次检查请求是否读阻塞，如果是读阻塞则抛出异常。
+            //再次检查请求是否读阻塞，如果是读阻塞则抛出异常。Why?
             blockException = checkRequestBlock(clusterState, internalRequest);
             if (blockException != null) {
                 throw blockException;
@@ -175,7 +177,7 @@ public abstract class TransportSingleShardAction<Request extends SingleShardRequ
         public void start() {
             //如果 shardIt 为空的时候，调用 transportService.sendRequest，并且此时的 node 为 localNode。
             // 而当找到 shardIt 的时候，则调用 perform 方法
-            if (shardIt == null) {
+            if (shardIt == null) { //从本地节点 读取数据
                 // just execute it on the local node
                 final Writeable.Reader<Response> reader = getResponseReader();
                 transportService.sendRequest(clusterService.localNode(), transportShardAction, internalRequest.request(),
@@ -201,6 +203,7 @@ public abstract class TransportSingleShardAction<Request extends SingleShardRequ
                     }
                 });
             } else {
+                //从远程节点 读取数据
                 perform(null);
             }
         }
@@ -219,7 +222,8 @@ public abstract class TransportSingleShardAction<Request extends SingleShardRequ
                 lastFailure = currentFailure;
                 this.lastFailure = currentFailure;
             }
-            final ShardRouting shardRouting = shardIt.nextOrNull(); //首先从 shardIt 获取 ShardRouting，并且判断其是否为空。
+            //目标分片
+            final ShardRouting shardRouting = shardIt.nextOrNull();
             if (shardRouting == null) {
                 Exception failure = lastFailure;
                 if (failure == null || isShardNotAvailableException(failure)) {
@@ -232,7 +236,8 @@ public abstract class TransportSingleShardAction<Request extends SingleShardRequ
                 listener.onFailure(failure);
                 return;
             }
-            DiscoveryNode node = nodes.get(shardRouting.currentNodeId()); //根据 ShardRouting 的当前 node id 获取 DiscoveryNode，并且判断其是否为空。
+            //目标分片所在的节点
+            DiscoveryNode node = nodes.get(shardRouting.currentNodeId());
             if (node == null) {
                 onFailure(shardRouting, new NoShardAvailableActionException(shardRouting.shardId()));
             } else {//用 shardRouting.shardId 设置 internalShardId。
