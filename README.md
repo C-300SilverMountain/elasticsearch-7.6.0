@@ -22,7 +22,7 @@ C:\ProgramData\Oracle\Java\javapath
 
 （注）：建议以上两个目录都删除或！！！[因为以上两个目录是自动配置java环境程序配置](https://baijiahao.baidu.com/s?id=1663285105466706416&wfr=spider&for=pc)的。。。
 
-（注）：elasticsearch-7.6.0要求必须是：JDK13，即保证当前环境是JDK10。
+（注）：elasticsearch-7.6.0要求必须是：JDK13，即保证当前环境是JDK13。
 
 #### 环境变量
 
@@ -107,7 +107,7 @@ buildscript {
 
 #### 配置项目JDK
 
-选中项目》Project Structure》Project页面》SDK》选JDK10，即可。。。
+选中项目》Project Structure》Project页面》SDK》选JDK13，即可。。。
 
 #### 配置gradle路径:
 
@@ -145,3 +145,11 @@ http://localhost:9200/
 [java.lang.NoClassDefFoundError: org/elasticsearch/plugins/ExtendedPluginsClassLoader 报错_我的男妈妈_歆语的博客-CSDN博客](https://blog.csdn.net/wodenanmama/article/details/120182411)
 
 [后端 - Elasticsearch7.3.2源码环境搭建 - 个人文章 - SegmentFault 思否](https://segmentfault.com/a/1190000022217206)
+
+
+
+配置gradle：
+
+> 把这两个选项从Gradle改成IntelliJ IDEA
+
+> 选中Add dependencies with provided scope to classpath

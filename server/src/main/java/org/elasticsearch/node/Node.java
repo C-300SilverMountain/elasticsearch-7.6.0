@@ -197,10 +197,19 @@ public class Node implements Closeable {
     public static final Setting<Boolean> NODE_DATA_SETTING = Setting.boolSetting("node.data", true, Property.NodeScope);
     public static final Setting<Boolean> NODE_MASTER_SETTING =
         Setting.boolSetting("node.master", true, Property.NodeScope);
-    /**
-     * ingest节点说明：
-     * https://juejin.cn/post/6844903873153335309
-     */
+
+//     * ingest节点说明：
+//     * https://juejin.cn/post/6844903873153335309
+//     * https://www.lishuo.net/read/elasticsearch/date-2023.05.23.09.08.54
+//     * 主要的节点类型如下。
+//     * 主节点（Master）。主节点在整个集群是唯一的，Master 从有资格进行选举的节点（Master Eligible）中选举出来。主节点主要负责管理集群变更、元数据的更改。如果要类比的话，主节点像是公司的总经办。
+//     * 数据节点（Data Node）。其负责保存数据，要扩充存储时候需要扩展这类节点。数据节点还负责执行数据相关的操作，如：搜索、聚合、CURD 等。所以对节点机器的 CPU、内存、I/O 要求都比较高。
+//     * 协调节点（Coordinating Node）。负责接受客户端的请求，将请求路由到对应的节点进行处理，并且把最终结果汇总到一起返回给客户端。因为需要处理结果集和对其进行排序，需要较高的 CPU 和内存资源。
+//     * 预处理节点（Ingest Node）。预处理操作允许在写入文档前通过定义好的一些 processors（处理器）和管道对数据进行转换。默认情况下节点启动后就是预处理节点。
+//     * Hot & Warm Node。不同硬件配置的 Data Node，用来实现 Hot & Warm 架构的节点，有利于降低集群部署成本。例如，在硬件资源好的机器中部署 Hot 类型的数据节点，而在硬件资源一般的机器上部署 Warm Node 节点。
+//     * 在生产环境中建议将每个节点设置为单一角色。如果业务量或者并发量不大的情况下，为了节省成本可以调整为一个节点多种角色的集群。在开发环境中的话，为了节省资源，一个节点可以设置多种角色
+//
+
     public static final Setting<Boolean> NODE_INGEST_SETTING =
         Setting.boolSetting("node.ingest", true, Property.NodeScope);
 
@@ -231,6 +240,7 @@ public class Node implements Closeable {
         }, Property.NodeScope));
     public static final Setting<String> BREAKER_TYPE_KEY = new Setting<>("indices.breaker.type", "hierarchy", (s) -> {
         switch (s) {
+            //层次断路器
             case "hierarchy":
             case "none":
                 return s;
@@ -393,6 +403,7 @@ public class Node implements Closeable {
             modules.add(indicesModule);
 
             SearchModule searchModule = new SearchModule(settings, false, pluginsService.filterPlugins(SearchPlugin.class));
+            //重点：创建断路器；用于预防OOM，注：并不能百分百预防，因为断路器并不是实时计算堆剩余大小，而是通过估算值进行计算。
             CircuitBreakerService circuitBreakerService = createCircuitBreakerService(settingsModule.getSettings(),
                 settingsModule.getClusterSettings());
             resourcesToClose.add(circuitBreakerService);
@@ -465,12 +476,12 @@ public class Node implements Closeable {
                                                  scriptModule.getScriptService(), xContentRegistry, environment, nodeEnvironment,
                                                  namedWriteableRegistry).stream())
                 .collect(Collectors.toList());
-            // 此构造函数会创建RestController实例
+            // 此构造函数会: new RestController实例
             ActionModule actionModule = new ActionModule(false, settings, clusterModule.getIndexNameExpressionResolver(),
                 settingsModule.getIndexScopedSettings(), settingsModule.getClusterSettings(), settingsModule.getSettingsFilter(),
                 threadPool, pluginsService.filterPlugins(ActionPlugin.class), client, circuitBreakerService, usageService, clusterService);
             modules.add(actionModule);
-
+            //请求总分发器：处理请求的类名以Action结尾：如 *Action，这些类都会注册到RestController，key为路径，value为*Action；
             final RestController restController = actionModule.getRestController();
             final NetworkModule networkModule = new NetworkModule(settings, false, pluginsService.filterPlugins(NetworkPlugin.class),
                 threadPool, bigArrays, pageCacheRecycler, circuitBreakerService, namedWriteableRegistry, xContentRegistry,

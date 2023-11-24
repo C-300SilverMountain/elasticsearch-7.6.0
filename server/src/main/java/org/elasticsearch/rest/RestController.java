@@ -61,10 +61,9 @@ import static org.elasticsearch.rest.RestStatus.METHOD_NOT_ALLOWED;
 import static org.elasticsearch.rest.RestStatus.NOT_ACCEPTABLE;
 import static org.elasticsearch.rest.RestStatus.OK;
 
-/**
- * RestController用于分发所有请求，通过uri定位到Rest*Action，Rest*Action再将请求转化为集群内部Transport*Action操作
- * RestController（分发） --> Rest*Action（转换成集群内操作） --> Transport*Action（集群操作）
- */
+
+// * RestController用于分发所有请求，通过uri定位到Rest*Action，Rest*Action再将请求转化为集群内部Transport*Action操作
+// * RestController（分发） --> Rest*Action（转换成集群内操作） --> Transport*Action（集群操作）
 public class RestController implements HttpServerTransport.Dispatcher {
 
     private static final Logger logger = LogManager.getLogger(RestController.class);

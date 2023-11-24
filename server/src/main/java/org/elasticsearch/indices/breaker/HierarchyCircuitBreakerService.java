@@ -81,7 +81,7 @@ public class HierarchyCircuitBreakerService extends CircuitBreakerService {
         Setting.doubleSetting("indices.breaker.fielddata.overhead", 1.03d, 0.0d, Property.Dynamic, Property.NodeScope);
     public static final Setting<CircuitBreaker.Type> FIELDDATA_CIRCUIT_BREAKER_TYPE_SETTING =
         new Setting<>("indices.breaker.fielddata.type", "memory", CircuitBreaker.Type::parseValue, Property.NodeScope);
-    //用户请求（RestRequest）断路器允许 Elasticsearch 防止每个请求的数据结构（例如，在请求期间用于计算聚合的内存）超过一定的内存量
+    //用户请求（RestRequest）断路器允许 Elasticsearch 防止每个请求(限制单个请求)的数据结构（例如，在请求期间用于计算聚合的内存）超过一定的内存量
     //请求断路器的限制，默认为 JVM 堆的 60%
     public static final Setting<ByteSizeValue> REQUEST_CIRCUIT_BREAKER_LIMIT_SETTING =
         Setting.memorySizeSetting("indices.breaker.request.limit", "60%", Property.Dynamic, Property.NodeScope);
@@ -102,6 +102,8 @@ public class HierarchyCircuitBreakerService extends CircuitBreakerService {
     // 飞行中请求断路器允许 Elasticsearch 限制传输或 HTTP 级别上所有当前活动传入请求的内存使用量，以免超过节点上的特定内存量。
     // 内存使用量基于请求本身的内容长度。该断路器还认为内存不仅需要用于表示原始请求，而且还需要作为默认开销反映的结构化对象。
     // 如何理解？请求断路器针对的是：用户请求，即RestRequest。而飞行请求断路器针对的所有请求，包含集群内数据交互，即TCP交互请求（内部）和 http交互请求（外部）
+    // 限制所有交互类请求（tcp+http）
+    // inflight (飞行过程中的)
     public static final Setting<ByteSizeValue> IN_FLIGHT_REQUESTS_CIRCUIT_BREAKER_LIMIT_SETTING =
         Setting.memorySizeSetting("network.breaker.inflight_requests.limit", "100%", Property.Dynamic, Property.NodeScope);
     public static final Setting<Double> IN_FLIGHT_REQUESTS_CIRCUIT_BREAKER_OVERHEAD_SETTING =
@@ -319,7 +321,7 @@ public class HierarchyCircuitBreakerService extends CircuitBreakerService {
     }
 
     /**
-     * Checks whether the parent breaker has been tripped
+     * Checks whether the parent breaker has been tripped（跳闸）：检查顶级断路器是否跳闸
      */
     public void checkParentLimit(long newBytesReserved, String label) throws CircuitBreakingException {
         final MemoryUsage memoryUsed = memoryUsed(newBytesReserved);
