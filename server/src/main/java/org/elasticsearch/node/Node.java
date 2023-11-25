@@ -324,6 +324,7 @@ public class Node implements Closeable {
                 logger.debug("using config [{}], data [{}], logs [{}], plugins [{}]",
                     environment.configFile(), Arrays.toString(environment.dataFiles()), environment.logsFile(), environment.pluginsFile());
             }
+            // 平台插件化主要靠他，基本流程：1、读取插件配置信息  2、从jar包加载class，执行初始化
             //创建插件服务。包含modulesDirectory（自带）和pluginsDirectory（用户自定义）
             this.pluginsService = new PluginsService(tmpSettings, environment.configFile(), environment.modulesFile(),
                 environment.pluginsFile(), classpathPlugins);
@@ -765,7 +766,7 @@ public class Node implements Closeable {
         assert clusterService.localNode().equals(localNodeFactory.getNode())
             : "clusterService has a different local node than the factory provided";
         transportService.acceptIncomingRequests(); //尝试接收请求。
-        discovery.startInitialJoin(); // 开始进行加入集群的循环。
+        discovery.startInitialJoin(); // 开调用ZenDiscovery的startInitialJoin()方法开始加入集群并准备进行参与选举。
         final TimeValue initialStateTimeout = DiscoverySettings.INITIAL_STATE_TIMEOUT_SETTING.get(settings());
         configureNodeAndClusterIdStateListener(clusterService);
         //开启线程去检查是否有开源加入的集群：

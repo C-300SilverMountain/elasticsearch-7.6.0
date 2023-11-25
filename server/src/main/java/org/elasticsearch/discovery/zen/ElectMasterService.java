@@ -139,6 +139,8 @@ public class ElectMasterService {
      * if no master has been elected.
      */
     public MasterCandidate electMaster(Collection<MasterCandidate> candidates) {
+        //这里所要投票的master节点的选择则是从候选节点数组中选择id最小版本最新的节点。
+        //这样，当前节点所要在选举中投票的master节点已经被选出。
         assert hasEnoughCandidates(candidates);
         List<MasterCandidate> sortedCandidates = new ArrayList<>(candidates);
         sortedCandidates.sort(MasterCandidate::compare);

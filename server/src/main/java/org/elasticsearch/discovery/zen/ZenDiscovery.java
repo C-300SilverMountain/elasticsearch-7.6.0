@@ -428,9 +428,11 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
      * or spawn a new join thread upon failure to do so.
      */
     private void innerJoinCluster() {
+        //https://blog.csdn.net/weixin_40318210/article/details/81515809
         DiscoveryNode masterNode = null;
         final Thread currentThread = Thread.currentThread();
         nodeJoinController.startElectionContext();
+        //在本节点还未选择出自己所认定master节点之前，会一直不断循环调用findMaster()去得到自己认定的master节点。
         while (masterNode == null && joinThreadControl.joinThreadActive(currentThread)) {
             masterNode = findMaster();
         }
@@ -439,7 +441,8 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
             logger.trace("thread is no longer in currentJoinThread. Stopping.");
             return;
         }
-
+        // 如果当前节点所选择的master节点正是自己，则会正式准备成为master节点，但是前提是他必须收到集群中别的节点的投票中有半数以上投向自己。
+        // 调用waitToBeElectedAsMaster()方法准备接收别的节点的投票结果等待投自己的超过半数以成为master节点
         if (transportService.getLocalNode().equals(masterNode)) {
             final int requiredJoins = Math.max(0, electMaster.minimumMasterNodes() - 1); // we count as one
             logger.debug("elected as master, waiting for incoming joins ([{}] needed)", requiredJoins);
@@ -796,6 +799,7 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
 
     private DiscoveryNode findMaster() {
         logger.trace("starting to ping");
+        //根据pingAndWait()方法去获取集群内其他节点关于选举的ping请求的回复
         List<ZenPing.PingResponse> fullPingResponses = pingAndWait(pingTimeout).toList();
         if (fullPingResponses == null) {
             logger.trace("No full ping responses");
@@ -834,14 +838,17 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
         }
 
         // nodes discovered during pinging
+        //候选人数组masterCandidates
         List<ElectMasterService.MasterCandidate> masterCandidates = new ArrayList<>();
         for (ZenPing.PingResponse pingResponse : pingResponses) {
             if (pingResponse.node().isMasterNode()) {
                 masterCandidates.add(new ElectMasterService.MasterCandidate(pingResponse.node(), pingResponse.getClusterStateVersion()));
             }
         }
-
+        //如果activeMasters为空，说明此时集群还并没有选举出master节点。
         if (activeMasters.isEmpty()) {
+            //那么首先判断当前masterCandidates数组中的候选节点个数是否已经大于最小开始选举接节点数量（默认为-1），
+            // 如果大于，则通过electMaster的electMaster()方法获取自己所投票的master节点并返回。
             if (electMaster.hasEnoughCandidates(masterCandidates)) {
                 final ElectMasterService.MasterCandidate winner = electMaster.electMaster(masterCandidates);
                 logger.trace("candidate {} won election", winner);
@@ -853,9 +860,11 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
                 return null;
             }
         } else {
+            //如果activeMasters不为空，说明该集群中已经存在master节点，那么就在activeMasterss中选择id最小的节点作为自己投票选择的master节点，并返回。
             assert !activeMasters.contains(localNode) :
                 "local node should never be elected as master when other nodes indicate an active master";
             // lets tie break between discovered nodes
+            //在activeMasterss中选择id最小的节点作为自己投票选择的master节点
             return electMaster.tieBreakActiveMasters(activeMasters);
         }
     }
@@ -1122,13 +1131,17 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
      * This is important to make sure that the background joining process is always in sync with any cluster state updates
      * like master loss, failure to join, received cluster state while joining etc.
      */
-    private class JoinThreadControl {
 
+    private class JoinThreadControl {
+        //running来表示Node加入集群与选举的开始与结束
         private final AtomicBoolean running = new AtomicBoolean(false);
+        // currentJoinThread则通过AtomicReference来保证工作线程的可见性与唯一性
         private final AtomicReference<Thread> currentJoinThread = new AtomicReference<>();
 
         /** returns true if join thread control is started and there is currently an active join thread */
+        //确保当前并没有工作线程在运行
         public boolean joinThreadActive() {
+            // 用来保证执行加入集群线程的唯一性
             Thread currentThread = currentJoinThread.get();
             return running.get() && currentThread != null && currentThread.isAlive();
         }
@@ -1148,13 +1161,16 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
         /** starts a new joining thread if there is no currently active one and join thread controlling is started */
         public void startNewThreadIfNotRunning() {
             assert Thread.holdsLock(stateMutex);
+            //检查是否已有线程正在申请加入集群
             if (joinThreadActive()) {
                 return;
             }
+            //如果没有，那么就新建一个工作线程准备开始加入集群。
             threadPool.generic().execute(new Runnable() {
                 @Override
                 public void run() {
                     Thread currentThread = Thread.currentThread();
+                    //通过cas更新curentJoinThread
                     if (!currentJoinThread.compareAndSet(null, currentThread)) {
                         return;
                     }

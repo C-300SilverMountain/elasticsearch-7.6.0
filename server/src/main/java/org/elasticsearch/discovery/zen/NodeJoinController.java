@@ -91,6 +91,7 @@ public class NodeJoinController {
             @Override
             public void onElectedAsMaster(ClusterState state) {
                 done.countDown();
+                //执行正式成为master节点要做的流程
                 callback.onElectedAsMaster(state);
             }
 

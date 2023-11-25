@@ -115,6 +115,7 @@ public class PluginsService {
         // we need to build a List of plugins for checking mandatory plugins
         final List<String> pluginsNames = new ArrayList<>();
         // first we load plugins that are on the classpath. this is for tests and transport clients
+        //0、内部插件：classpath下插件
         for (Class<? extends Plugin> pluginClass : classpathPlugins) {
             //通过java原生反射生成对象
             Plugin plugin = loadPlugin(pluginClass, settings, configPath);
@@ -127,10 +128,9 @@ public class PluginsService {
             pluginsList.add(pluginInfo);
             pluginsNames.add(pluginInfo.getName());
         }
-        //模块加载的过程
+        //1、模块：扫描模块目录，获取各模块的配置信息。注：并没有执行类加载+初始化
         Set<Bundle> seenBundles = new LinkedHashSet<>();
         List<PluginInfo> modulesList = new ArrayList<>();
-        // load modules
         if (modulesDirectory != null) {
             try {
                 //加载es内部插件，即modules 目录下的jar包（注：这里仅是拿到插件的配置参数，并没有做实例化对象）
@@ -143,8 +143,7 @@ public class PluginsService {
                 throw new IllegalStateException("Unable to initialize modules", ex);
             }
         }
-        //插件的加载过程
-        // now, find all the ones that are in plugins/
+        //2、插件：扫描插件目录，获取各插件的配置信息。注：并没有执行类加载+初始化
         if (pluginsDirectory != null) {
             try {
                 // TODO: remove this leniency, but tests bogusly rely on it
@@ -162,11 +161,11 @@ public class PluginsService {
                 throw new IllegalStateException("Unable to initialize plugins", ex);
             }
         }
-
-        //modules和plugins目录下都是插件，只是人为划分：内部插件(modules)和用户自定义插件(plugins)
+        //3、插件类加载+初始化：合并modules和plugins后，统一加载、初始化
+        //注：modules和plugins目录下都是插件，只是人为划分：内部插件(modules)和用户自定义插件(plugins)
         List<Tuple<PluginInfo, Plugin>> loaded = loadBundles(seenBundles);
         pluginsLoaded.addAll(loaded);
-
+        //插件类型：modules和plugins，保存时加以区分
         this.info = new PluginsAndModules(pluginsList, modulesList);
         this.plugins = Collections.unmodifiableList(pluginsLoaded);
 
@@ -282,6 +281,7 @@ public class PluginsService {
     // a "bundle" is a group of jars in a single classloader
     static class Bundle {
         final PluginInfo plugin;
+        //插件依赖的所有jar包
         final Set<URL> urls;
 
         Bundle(PluginInfo plugin, Path dir) throws IOException {
