@@ -126,6 +126,12 @@ public class NodeJoinController {
                 final int pendingNodes = myElectionContext.getPendingMasterJoinsCount();
                 logger.trace("timed out waiting to be elected. waited [{}]. pending master node joins [{}]", timeValue, pendingNodes);
             }
+
+            //如果在规定的timeout里，并没有收到足够的投票，那么说明本节点的选举失败。failContextIfNeeded会触发onFailure
+            // 则会回到通过markThreadAsDoneAndStartNew()关闭当前线程，并重新启动一个线程在startNewThreadIfNotRunning()方法中开始下一次循环中，继续上述选举的流程参与选举。
+
+            // https://blog.csdn.net/kissfox220/article/details/119956861
+            // 如果30秒内没有完成选举、则放弃本轮选举，发布选举失败信息，通知集群内其他节点开始新一轮临时master选举
             failContextIfNeeded(myElectionContext, "timed out waiting to be elected");
         } catch (Exception e) {
             logger.error("unexpected failure while waiting for incoming joins", e);
@@ -186,9 +192,12 @@ public class NodeJoinController {
      * checks if there is an on going request to become master and if it has enough pending joins. If so, the node will
      * become master via a ClusterState update task.
      */
+    // 在checkPendingJoinsAndElectIfNeed()方法中，如果已经接收到的join请求也就是投票自己的节点数量已经超过集群中节点数量的半数，
+    // 那么调用closeAndBecomeMaster()方法结束本次选举正式成为master节点。
     private synchronized void checkPendingJoinsAndElectIfNeeded() {
         assert electionContext != null : "election check requested but no active context";
         final int pendingMasterJoins = electionContext.getPendingMasterJoinsCount();
+        //接收到的有选举资格的投票数是否满足最小投票数
         if (electionContext.isEnoughPendingJoins(pendingMasterJoins) == false) {
             if (logger.isTraceEnabled()) {
                 logger.trace("not enough joins for election. Got [{}], required [{}]", pendingMasterJoins,
@@ -199,7 +208,9 @@ public class NodeJoinController {
                 logger.trace("have enough joins for election. Got [{}], required [{}]", pendingMasterJoins,
                     electionContext.requiredMasterJoins);
             }
+            // 成为主节点、发布集群状态
             electionContext.closeAndBecomeMaster();
+            //清空选举容器，防止后续再次选举的时候导致累加
             electionContext = null; // clear this out so future joins won't be accumulated
         }
     }
@@ -279,7 +290,8 @@ public class NodeJoinController {
             final String source = "zen-disco-elected-as-master ([" + tasks.size() + "] nodes joined)";
 
             // noop listener, the election finished listener determines result
-            tasks.put(JoinTaskExecutor.newBecomeMasterTask(), (source1, e) -> {});
+            tasks.put(JoinTaskExecutor.newBecomeMasterTask(), (source1, e) -> {
+            });
             tasks.put(JoinTaskExecutor.newFinishElectionTask(), electionFinishedListener);
             masterService.submitStateUpdateTasks(source, tasks, ClusterStateTaskConfig.build(Priority.URGENT), joinTaskExecutor);
         }

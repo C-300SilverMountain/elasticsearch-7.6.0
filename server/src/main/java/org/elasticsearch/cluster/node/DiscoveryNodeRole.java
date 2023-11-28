@@ -128,6 +128,7 @@ public abstract class DiscoveryNodeRole {
     /**
      * Represents the role for a master-eligible node.
      */
+    //主节点的候选者，并不是真正的主节点。 真正的主节点必须通过竞选得到
     public static final DiscoveryNodeRole MASTER_ROLE = new DiscoveryNodeRole("master", "m") {
 
         @Override

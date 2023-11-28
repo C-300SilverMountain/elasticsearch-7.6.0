@@ -91,6 +91,7 @@ public class ElectMasterService {
         public static int compare(MasterCandidate c1, MasterCandidate c2) {
             // we explicitly swap c1 and c2 here. the code expects "better" is lower in a sorted
             // list, so if c2 has a higher cluster state version, it needs to come first.
+            // 当存在多个候选节点时，根据版本号和nodeid进行选择
             int ret = Long.compare(c2.clusterStateVersion, c1.clusterStateVersion);
             if (ret == 0) {
                 ret = compareNodes(c1.getNode(), c2.getNode());
