@@ -769,7 +769,8 @@ public class Node implements Closeable {
         // 选举流程：
         // https://blog.csdn.net/weixin_40318210/article/details/81515809
         // https://blog.csdn.net/kissfox220/article/details/119956861
-        discovery.startInitialJoin(); // 开调用ZenDiscovery的startInitialJoin()方法开始加入集群并准备进行参与选举。
+        // 调用ZenDiscovery的startInitialJoin()方法开始加入集群并准备进行参与选举。
+        discovery.startInitialJoin();
         final TimeValue initialStateTimeout = DiscoverySettings.INITIAL_STATE_TIMEOUT_SETTING.get(settings());
         configureNodeAndClusterIdStateListener(clusterService);
         //开启线程去检查是否有开源加入的集群：

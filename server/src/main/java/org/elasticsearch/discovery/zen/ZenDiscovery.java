@@ -432,9 +432,9 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
         DiscoveryNode masterNode = null;
         final Thread currentThread = Thread.currentThread();
         nodeJoinController.startElectionContext();
-        //在本节点还未选择出自己所认定master节点之前，会一直不断循环调用findMaster()去得到自己认定的master节点。
+        //在本节点还未选择出自己所认定master节点之前，会一直不断循环调用findMaster()，去得到自己认定的master节点。
         while (masterNode == null && joinThreadControl.joinThreadActive(currentThread)) {
-            //选临时master: 当前节点通过 选中id最小节点，并投票给它
+            //选出临时master: 当前节点通过 选中id最小节点，并投票给它
             masterNode = findMaster();
         }
 
@@ -442,6 +442,11 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
             logger.trace("thread is no longer in currentJoinThread. Stopping.");
             return;
         }
+        // 总结：
+        // 到此，存在两种情况：
+        // 1、当前节点选举自己为临时主节点，则会调用waitToBeElectedAsMaster，等待接收其他节点的投票，一旦超过半数，则正式成为主节点。
+        // 2、当前节点选举其他节点为临时主节点，则会通过joinElectedMaster方法向临时主节点发送自己的投票。
+
         // 如果当前节点所选择的master节点正是自己，则会正式准备成为master节点，但是前提是他必须收到集群中别的节点的投票中有半数以上投向自己。
         // 调用waitToBeElectedAsMaster()方法准备接收别的节点的投票结果等待投自己的超过半数以成为master节点
         if (transportService.getLocalNode().equals(masterNode)) {
@@ -470,6 +475,8 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
             // process any incoming joins (they will fail because we are not the master)
             nodeJoinController.stopElectionContext(masterNode + " elected");
 
+            // 发送的目标节点的地址：discover/zen/join。如果在有限次数内成功，就说明当前节点所投票的目标节点成功成为master节点，本次选举也宣告成功。success=true
+            // 若在有限次数内都没有成功（选举的节点没有收到超过半数的master选票，或其他原因），则返回false，此时，重新开启一个线程去参与下一轮选举。
             // send join request
             final boolean success = joinElectedMaster(masterNode);
 
@@ -800,6 +807,7 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
 
     private DiscoveryNode findMaster() {
         logger.trace("starting to ping");
+        // 到此说明：节点之间的相互投票是通过ping来实现。具体实现类：UnicastZenPing，其构造函数中会读取配置中的discovery.zen.ping.unicast.hosts,保存其他节点的ip.
         //根据pingAndWait()方法去获取集群内其他节点关于选举的ping请求的回复。注：这里阻塞等待回复！！！
         List<ZenPing.PingResponse> fullPingResponses = pingAndWait(pingTimeout).toList();
         if (fullPingResponses == null) {
@@ -821,11 +829,14 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
         final DiscoveryNode localNode = transportService.getLocalNode();
 
         // add our selves
+        // 过滤掉本地节点的选举数据（来自ping），重新加入当前本地节点的最新选举数据。
+        // 因为刚加入选举，所以其还没有master节点的选择
         assert fullPingResponses.stream().map(ZenPing.PingResponse::node)
             .filter(n -> n.equals(localNode)).findAny().isPresent() == false;
-        // 单独添加当前节点到节点列表中
+        // 重新添加当前节点选举数据到ping结果列表中
         fullPingResponses.add(new ZenPing.PingResponse(localNode, null, this.clusterState()));
         // 通过masterElectionIgnoreNonMasters参数来判断是否需要忽略 没有候选资格的节点
+        // masterElectionIgnoreNonMasters默认false,因此data节点的选举数据也会被考虑到选举的过程中。
         // filter responses
         final List<ZenPing.PingResponse> pingResponses = filterPingResponses(fullPingResponses, masterElectionIgnoreNonMasters, logger);
         //activeMasters代表：集群中已存在的主节点。一般为1个或null
@@ -850,6 +861,12 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
                 masterCandidates.add(new ElectMasterService.MasterCandidate(pingResponse.node(), pingResponse.getClusterStateVersion()));
             }
         }
+
+        // 总结:
+        // 到此得到两个列表：activeMasters（现存主节点）和 masterCandidates（候选节点）。
+        // 当集群首次部署上线，activeMasters必为空，则只能从masterCandidates列表中选举。
+        // 非首次部署上线，则从activeMasters列表中选举。
+
         //如果当前没有存活的主节点，则从有资格的候选节点中开始进行选举（即masterCandidates列表中的节点）
         //如果activeMasters为空，说明此时集群还并没有选举出master节点。
         if (activeMasters.isEmpty()) {
@@ -1139,6 +1156,7 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
      * like master loss, failure to join, received cluster state while joining etc.
      */
 
+    // JoinThreadControl作用：用来保证申请加入集群的工作线程 唯一性
     private class JoinThreadControl {
         //running来表示Node加入集群与选举的开始与结束
         private final AtomicBoolean running = new AtomicBoolean(false);
@@ -1178,11 +1196,11 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
                 @Override
                 public void run() {
                     Thread currentThread = Thread.currentThread();
-                    //通过cas更新curentJoinThread
+                    //通过cas更新curentJoinThread （无锁操作，避免并发）
                     if (!currentJoinThread.compareAndSet(null, currentThread)) {
                         return;
                     }
-                    //在服务结束之前，并且当前线程是ZenDiscovery的工作线程之时，不断再循环中执行innerJoinCluster()。
+                    //在服务结束之前，并且当前线程是ZenDiscovery的工作线程之时，不断循环执行innerJoinCluster()申请加入集群。
                     while (running.get() && joinThreadActive(currentThread)) {
                         try {
                             innerJoinCluster();

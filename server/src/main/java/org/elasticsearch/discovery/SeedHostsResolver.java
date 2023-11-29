@@ -137,6 +137,7 @@ public class SeedHostsResolver extends AbstractLifecycleComponent implements Con
         if (resolveTimeout.nanos() < 0) {
             throw new IllegalArgumentException("resolve timeout must be non-negative but was [" + resolveTimeout + "]");
         }
+        //并发解析host ip成 TransportAddress
         // create tasks to submit to the executor service; we will wait up to resolveTimeout for these tasks to complete
         final List<Callable<TransportAddress[]>> callables =
             hosts
@@ -151,6 +152,7 @@ public class SeedHostsResolver extends AbstractLifecycleComponent implements Con
             return Collections.emptyList();
         }
         final List<TransportAddress> transportAddresses = new ArrayList<>();
+        //本机host ip，用于过滤本机
         final Set<TransportAddress> localAddresses = new HashSet<>();
         localAddresses.add(transportService.boundAddress().publishAddress());
         localAddresses.addAll(Arrays.asList(transportService.boundAddress().boundAddresses()));
@@ -167,6 +169,7 @@ public class SeedHostsResolver extends AbstractLifecycleComponent implements Con
                     for (int addressId = 0; addressId < addresses.length; addressId++) {
                         final TransportAddress address = addresses[addressId];
                         // no point in pinging ourselves
+                        //保留非本地host ip
                         if (localAddresses.contains(address) == false) {
                             transportAddresses.add(address);
                         }

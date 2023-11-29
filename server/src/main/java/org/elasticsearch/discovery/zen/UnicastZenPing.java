@@ -147,6 +147,7 @@ public class UnicastZenPing implements ZenPing {
     }
 
     private SeedHostsProvider.HostsResolver createHostsResolver() {
+        // 解析集群内的节点
         return hosts -> SeedHostsResolver.resolveHostsLists(
             new CancellableThreads() {
                 public void execute(Interruptible interruptible) {
@@ -211,9 +212,11 @@ public class UnicastZenPing implements ZenPing {
         final ConnectionProfile connectionProfile =
             ConnectionProfile.buildSingleChannelProfile(TransportRequestOptions.Type.REG, requestDuration, requestDuration,
                 TimeValue.MINUS_ONE, null);
+        //一个PingingRound代表本节点的一次ping操作，包含ping操作连接类型和timeout，所要发往的节点，和本轮操作的id
         final PingingRound pingingRound = new PingingRound(pingingRoundIdGenerator.incrementAndGet(), seedAddresses, resultsConsumer,
             nodes.getLocalNode(), connectionProfile);
         activePingingRounds.put(pingingRound.id(), pingingRound);
+        //构造pingSender，分三轮，按照一定的时间间隔通过sendPings方法向所有节点发送三次ping请求
         final AbstractRunnable pingSender = new AbstractRunnable() {
             @Override
             public void onFailure(Exception e) {
@@ -227,9 +230,11 @@ public class UnicastZenPing implements ZenPing {
                 sendPings(requestDuration, pingingRound);
             }
         };
+        //默认时间为1秒一次，执行一次pingSender的sendPings方法
         threadPool.generic().execute(pingSender);
         threadPool.schedule(pingSender, TimeValue.timeValueMillis(scheduleDuration.millis() / 3), ThreadPool.Names.GENERIC);
         threadPool.schedule(pingSender, TimeValue.timeValueMillis(scheduleDuration.millis() / 3 * 2), ThreadPool.Names.GENERIC);
+        //启动任务，3秒后，用来结束pingingRound关于pingResponse的收集
         threadPool.schedule(new AbstractRunnable() {
             @Override
             protected void doRun() throws Exception {
@@ -331,6 +336,7 @@ public class UnicastZenPing implements ZenPing {
         public void close() {
             List<Connection> toClose = null;
             synchronized (this) {
+                //通过cas将closed的状态从false改为true，并将当前id从可用的activePingingRounds集合中移除，关闭当前节点与集群中别的节点的所有连接。
                 if (closed.compareAndSet(false, true)) {
                     activePingingRounds.remove(id);
                     toClose = new ArrayList<>(tempConnections.values());
@@ -381,12 +387,14 @@ public class UnicastZenPing implements ZenPing {
                         Version.CURRENT.minimumCompatibilityVersion());
                 }
             }).collect(Collectors.toSet());
-
+        //将pingingRound和pingRequest 发送至目标节点
         nodesToPing.forEach(node -> sendPingRequestToNode(node, timeout, pingingRound, pingRequest));
     }
 
     private void sendPingRequestToNode(final DiscoveryNode node, TimeValue timeout, final PingingRound pingingRound,
                                        final UnicastPingRequest pingRequest) {
+        //启动一个线程，向目标节点discover/zen/unicast发送ping请求。同时通过getPingResponseHandler设置了关于此次的pingingRound的ResponseHandler，
+        //用于处理目标节点对这个request的回复。
         submitToExecutor(new AbstractRunnable() {
             @Override
             protected void doRun() throws Exception {
@@ -455,6 +463,7 @@ public class UnicastZenPing implements ZenPing {
 
             @Override
             public void handleResponse(UnicastPingResponse response) {
+                //先判断pingingRound是否已经关闭，如果还未关闭，则将response中关于节点对于选举的数据存放在其Map中，按照节点和其选举的选择进行存放。
                 logger.trace("[{}] received response from {}: {}", pingingRound.id(), node, Arrays.toString(response.pingResponses));
                 if (pingingRound.isClosed()) {
                     if (logger.isTraceEnabled()) {
@@ -500,6 +509,8 @@ public class UnicastZenPing implements ZenPing {
             if (closed) {
                 throw new AlreadyClosedException("node is shutting down");
             }
+            // https://blog.csdn.net/weixin_40318210/article/details/81489151
+            // 接收到别的节点的ping请求的时候，将会先判断是否处于一个集群的节点，如果是，则发回相应的pingResponse
             if (request.pingResponse.clusterName().equals(clusterName)) {
                 channel.sendResponse(handlePingRequest(request));
             } else {

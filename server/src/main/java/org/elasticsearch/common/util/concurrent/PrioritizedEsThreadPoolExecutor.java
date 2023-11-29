@@ -41,6 +41,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * <p>
  * Note, if two tasks have the same priority, the first to arrive will be executed first (FIFO style).
  */
+// PrioritizedEsThreadPoolExecutor来根据线程的优先级来控制优先顺序。
 public class PrioritizedEsThreadPoolExecutor extends EsThreadPoolExecutor {
 
     private static final TimeValue NO_WAIT_TIME_VALUE = TimeValue.timeValueMillis(0);
@@ -48,6 +49,8 @@ public class PrioritizedEsThreadPoolExecutor extends EsThreadPoolExecutor {
     private final Queue<Runnable> current = ConcurrentCollections.newQueue();
     private final ScheduledExecutorService timer;
 
+    // 实现优先级的核心在于线程池的等待队列，也就是PriorityBlockingQueue
+    // PriorityBlockingQueue的核心在于siftUpComparable方法，这个方法将在add()将任务加入队列的时候被调用，用来确认任务在队列当中的任务位置。
     public PrioritizedEsThreadPoolExecutor(String name, int corePoolSize, int maximumPoolSize, long keepAliveTime, TimeUnit unit,
                                     ThreadFactory threadFactory, ThreadContext contextHolder, ScheduledExecutorService timer) {
         super(name, corePoolSize, maximumPoolSize, keepAliveTime, unit, new PriorityBlockingQueue<>(), threadFactory, contextHolder);
@@ -141,6 +144,7 @@ public class PrioritizedEsThreadPoolExecutor extends EsThreadPoolExecutor {
                 return command;
             }
             Priority priority = ((PrioritizedRunnable) command).priority();
+            //TieBreakingPrioritizedRunnable 通过 insertionOrder定义任务的顺序
             return new TieBreakingPrioritizedRunnable(super.wrapRunnable(command), priority, insertionOrder.incrementAndGet());
         } else if (command instanceof PrioritizedFutureTask) {
             return command;
