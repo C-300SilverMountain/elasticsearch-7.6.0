@@ -24,8 +24,11 @@ import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.PlainActionFuture;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.client.transport.TransportClient;
+import org.elasticsearch.client.transport.TransportClientNodesServiceTests;
+import org.elasticsearch.cluster.action.index.NodeMappingRefreshAction;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
+import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.network.NetworkService;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.PageCacheRecycler;
@@ -44,7 +47,10 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static java.util.Collections.emptyMap;
 import static java.util.Collections.emptySet;
@@ -194,7 +200,40 @@ public class TransportServiceHandshakeTests extends ESTestCase {
             emptySet(),
             handleB.discoveryNode.getVersion());
 
+//        handleA.transportService.sendRequest();
         handleA.transportService.connectToNode(discoveryNode, TestProfiles.LIGHT_PROFILE);
+        final CountDownLatch latch = new CountDownLatch(1);
+        handleA.transportService.sendRequest(discoveryNode, NodeMappingRefreshAction.ACTION_NAME, new TransportClientNodesServiceTests.TestRequest(),
+            TransportRequestOptions.EMPTY, new TransportResponseHandler<TransportResponse>() {
+                @Override
+                public TransportResponse read(StreamInput in) {
+                    return null;
+                }
+
+                @Override
+                public void handleResponse(TransportResponse response1) {
+                    System.out.println("ok");
+//                    latch.countDown();
+                }
+
+                @Override
+                public void handleException(TransportException exp) {
+                    System.out.println("ok");
+//                    latch.countDown();
+                }
+
+                @Override
+                public String executor() {
+                    return randomBoolean() ? ThreadPool.Names.SAME : ThreadPool.Names.GENERIC;
+                }
+            });
+        try {
+            latch.await();
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+
+
         assertTrue(handleA.transportService.nodeConnected(discoveryNode));
     }
 

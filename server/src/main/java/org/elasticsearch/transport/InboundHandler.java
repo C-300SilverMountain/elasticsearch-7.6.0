@@ -119,6 +119,7 @@ public class InboundHandler {
                 handleRequest(channel, (InboundMessage.Request) message, reference.length());
             } else {
                 final TransportResponseHandler<?> handler;
+                // 根据requestId找到对应的handler比较处理，这里的requestId，相当与session，当前节点唯一
                 long requestId = message.getRequestId();
                 if (message.isHandshake()) {
                     handler = handshaker.removeHandlerForHandshake(requestId);

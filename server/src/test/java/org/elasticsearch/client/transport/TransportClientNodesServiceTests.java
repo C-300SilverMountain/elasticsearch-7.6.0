@@ -344,9 +344,10 @@ public class TransportClientNodesServiceTests extends ESTestCase {
         }
     }
 
+    // TransportService之间通信验证
     public void testSniffNodesSamplerClosesConnections() throws Exception {
         final TestThreadPool threadPool = new TestThreadPool("testSniffNodesSamplerClosesConnections");
-
+        // 远程服务
         Settings remoteSettings = Settings.builder().put(Node.NODE_NAME_SETTING.getKey(), "remote").build();
         try (MockTransportService remoteService = createNewService(remoteSettings, Version.CURRENT, threadPool, null)) {
             final MockHandler handler = new MockHandler(remoteService);
@@ -359,7 +360,7 @@ public class TransportClientNodesServiceTests extends ESTestCase {
                     .put(TransportClient.CLIENT_TRANSPORT_PING_TIMEOUT.getKey(), TimeValue.timeValueSeconds(1))
                     .put(TransportClient.CLIENT_TRANSPORT_NODES_SAMPLER_INTERVAL.getKey(), TimeValue.timeValueSeconds(30))
                     .build();
-
+            // 本地客户端
             try (MockTransportService clientService = createNewService(clientSettings, Version.CURRENT, threadPool, null)) {
                 final List<Transport.Connection> establishedConnections = new CopyOnWriteArrayList<>();
 
@@ -431,6 +432,7 @@ public class TransportClientNodesServiceTests extends ESTestCase {
     }
 
     public static class TestRequest extends TransportRequest {
+        private String msg = "----------test.....";
 
     }
 

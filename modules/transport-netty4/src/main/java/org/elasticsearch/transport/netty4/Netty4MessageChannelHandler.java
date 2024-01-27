@@ -26,6 +26,7 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 import io.netty.util.Attribute;
+import io.netty.util.CharsetUtil;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.transport.Transports;
@@ -63,6 +64,8 @@ final class Netty4MessageChannelHandler extends ChannelDuplexHandler {
 
         final ByteBuf buffer = (ByteBuf) msg;
         try {
+//            System.out.println("接收到客户端的消息:" + buffer.toString(CharsetUtil.UTF_8));
+
             Channel channel = ctx.channel();
             Attribute<Netty4TcpChannel> channelAttribute = channel.attr(Netty4Transport.CHANNEL_KEY);
             transport.inboundMessage(channelAttribute.get(), Netty4Utils.toBytesReference(buffer));
@@ -147,6 +150,7 @@ final class Netty4MessageChannelHandler extends ChannelDuplexHandler {
             } else {
                 writeBuffer = write.buf;
             }
+            // 接收 ack,代表发送成功
             final ChannelFuture writeFuture = ctx.write(writeBuffer);
             if (sliced == false || write.buf.readableBytes() == 0) {
                 currentWrite = null;

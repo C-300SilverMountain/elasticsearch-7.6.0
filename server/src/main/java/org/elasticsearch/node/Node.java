@@ -723,7 +723,7 @@ public class Node implements Closeable {
         clusterService.getMasterService().setClusterStatePublisher(discovery::publish);
 
         // Start the transport service now so the publish address will be added to the local disco node in ClusterService
-        TransportService transportService = injector.getInstance(TransportService.class); // 负责节点间数据同步。
+        TransportService transportService = injector.getInstance(TransportService.class); // 负责节点间通讯。
         transportService.getTaskManager().setTaskResultsService(injector.getInstance(TaskResultsService.class));
         transportService.start();
         assert localNodeFactory.getNode() != null;
@@ -765,7 +765,7 @@ public class Node implements Closeable {
         clusterService.start();
         assert clusterService.localNode().equals(localNodeFactory.getNode())
             : "clusterService has a different local node than the factory provided";
-        transportService.acceptIncomingRequests(); //尝试接收请求。
+        transportService.acceptIncomingRequests(); //说明TransportService已准备好，可接收请求。
         // 选举流程：
         // https://blog.csdn.net/weixin_40318210/article/details/81515809
         // https://blog.csdn.net/kissfox220/article/details/119956861

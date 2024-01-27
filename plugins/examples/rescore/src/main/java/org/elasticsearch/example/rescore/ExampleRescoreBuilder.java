@@ -51,9 +51,11 @@ import static org.elasticsearch.common.xcontent.ConstructingObjectParser.constru
 import static org.elasticsearch.common.xcontent.ConstructingObjectParser.optionalConstructorArg;
 
 /**
+ * 说明：https://bbs.huaweicloud.com/blogs/257255
  * Example rescorer that multiplies the score of the hit by some factor and doesn't resort them.
  */
 public class ExampleRescoreBuilder extends RescorerBuilder<ExampleRescoreBuilder> {
+    // example作为自定义重打分的名字
     public static final String NAME = "example";
 
     private final float factor;
@@ -88,6 +90,7 @@ public class ExampleRescoreBuilder extends RescorerBuilder<ExampleRescoreBuilder
 
     private static final ParseField FACTOR = new ParseField("factor");
     private static final ParseField FACTOR_FIELD = new ParseField("factor_field");
+
     @Override
     protected void doXContent(XContentBuilder builder, Params params) throws IOException {
         builder.field(FACTOR.getPreferredName(), factor);
@@ -97,11 +100,13 @@ public class ExampleRescoreBuilder extends RescorerBuilder<ExampleRescoreBuilder
     }
 
     private static final ConstructingObjectParser<ExampleRescoreBuilder, Void> PARSER = new ConstructingObjectParser<>(NAME,
-            args -> new ExampleRescoreBuilder((float) args[0], (String) args[1]));
+        args -> new ExampleRescoreBuilder((float) args[0], (String) args[1]));
+
     static {
         PARSER.declareFloat(constructorArg(), FACTOR);
         PARSER.declareString(optionalConstructorArg(), FACTOR_FIELD);
     }
+
     public static ExampleRescoreBuilder fromXContent(XContentParser parser) {
         return PARSER.apply(parser, null);
     }
@@ -109,7 +114,7 @@ public class ExampleRescoreBuilder extends RescorerBuilder<ExampleRescoreBuilder
     @Override
     public RescoreContext innerBuildContext(int windowSize, QueryShardContext context) throws IOException {
         IndexFieldData<?> factorField =
-                this.factorField == null ? null : context.getForField(context.fieldMapper(this.factorField));
+            this.factorField == null ? null : context.getForField(context.fieldMapper(this.factorField));
         return new ExampleRescoreContext(windowSize, factor, factorField);
     }
 
@@ -120,7 +125,7 @@ public class ExampleRescoreBuilder extends RescorerBuilder<ExampleRescoreBuilder
         }
         ExampleRescoreBuilder other = (ExampleRescoreBuilder) obj;
         return factor == other.factor
-                && Objects.equals(factorField, other.factorField);
+            && Objects.equals(factorField, other.factorField);
     }
 
     @Override
@@ -154,8 +159,10 @@ public class ExampleRescoreBuilder extends RescorerBuilder<ExampleRescoreBuilder
 
         @Override
         public TopDocs rescore(TopDocs topDocs, IndexSearcher searcher, RescoreContext rescoreContext) throws IOException {
+            System.out.println("启动精排...");
             ExampleRescoreContext context = (ExampleRescoreContext) rescoreContext;
             int end = Math.min(topDocs.scoreDocs.length, rescoreContext.getWindowSize());
+            // 自定义的第一部分逻辑，将重打分前的得分乘以factor参数
             for (int i = 0; i < end; i++) {
                 topDocs.scoreDocs[i].score *= context.factor;
             }
@@ -170,7 +177,7 @@ public class ExampleRescoreBuilder extends RescorerBuilder<ExampleRescoreBuilder
                  * them in (reader, field, docId) order because that is the
                  * order they are on disk.
                  */
-                ScoreDoc[] sortedByDocId = new ScoreDoc[topDocs.scoreDocs.length]; 
+                ScoreDoc[] sortedByDocId = new ScoreDoc[topDocs.scoreDocs.length];
                 System.arraycopy(topDocs.scoreDocs, 0, sortedByDocId, 0, topDocs.scoreDocs.length);
                 Arrays.sort(sortedByDocId, (a, b) -> a.doc - b.doc); // Safe because doc ids >= 0
                 Iterator<LeafReaderContext> leaves = searcher.getIndexReader().leaves().iterator();
@@ -187,19 +194,22 @@ public class ExampleRescoreBuilder extends RescorerBuilder<ExampleRescoreBuilder
                         if (false == (fd instanceof AtomicNumericFieldData)) {
                             throw new IllegalArgumentException("[" + context.factorField.getFieldName() + "] is not a number");
                         }
+                        // 拿到了factor_field参数对应字段的值
                         data = ((AtomicNumericFieldData) fd).getDoubleValues();
                     }
                     if (false == data.advanceExact(topDocs.scoreDocs[i].doc - leaf.docBase)) {
                         throw new IllegalArgumentException("document [" + topDocs.scoreDocs[i].doc
-                                + "] does not have the field [" + context.factorField.getFieldName() + "]");
+                            + "] does not have the field [" + context.factorField.getFieldName() + "]");
                     }
                     if (data.docValueCount() > 1) {
                         throw new IllegalArgumentException("document [" + topDocs.scoreDocs[i].doc
-                                + "] has more than one value for [" + context.factorField.getFieldName() + "]");
+                            + "] has more than one value for [" + context.factorField.getFieldName() + "]");
                     }
+                    // 自定义的第二部分逻辑，将逻辑一之后的得分再乘以factor_field对应字段的值
                     topDocs.scoreDocs[i].score *= data.nextValue();
                 }
             }
+            // 将最终返回的doc降序排列
             // Sort by score descending, then docID ascending, just like lucene's QueryRescorer
             Arrays.sort(topDocs.scoreDocs, (a, b) -> {
                 if (a.score > b.score) {
@@ -211,12 +221,14 @@ public class ExampleRescoreBuilder extends RescorerBuilder<ExampleRescoreBuilder
                 // Safe because doc ids >= 0
                 return a.doc - b.doc;
             });
+            System.out.println("精排完成...");
+
             return topDocs;
         }
 
         @Override
         public Explanation explain(int topLevelDocId, IndexSearcher searcher, RescoreContext rescoreContext,
-                Explanation sourceExplanation) throws IOException {
+                                   Explanation sourceExplanation) throws IOException {
             ExampleRescoreContext context = (ExampleRescoreContext) rescoreContext;
             // Note that this is inaccurate because it ignores factor field
             return Explanation.match(context.factor, "test", singletonList(sourceExplanation));

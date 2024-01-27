@@ -506,7 +506,7 @@ final class TransportClientNodesService implements Closeable {
                                 pingConnection = connectionToClose;
                             }
                             transportService.sendRequest(pingConnection, ClusterStateAction.NAME,
-                                Requests.clusterStateRequest().clear().nodes(true).local(true),
+                                Requests.clusterStateRequest().clear().indices(".....test....").nodes(true).local(true),
                                 TransportRequestOptions.builder().withType(TransportRequestOptions.Type.STATE)
                                     .withTimeout(pingTimeout).build(),
                                 new TransportResponseHandler<ClusterStateResponse>() {

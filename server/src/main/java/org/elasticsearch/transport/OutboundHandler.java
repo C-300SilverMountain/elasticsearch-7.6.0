@@ -83,6 +83,7 @@ final class OutboundHandler {
         Version version = Version.min(this.version, channelVersion);
         OutboundMessage.Request message = new OutboundMessage.Request(threadPool.getThreadContext(), features, request, version, action,
             requestId, isHandshake, compressRequest);
+        // 发送成功后，拿到对应的ack，便触发listener
         ActionListener<Void> listener = ActionListener.wrap(() ->
             messageListener.onRequestSent(node, requestId, action, request, options));
         sendMessage(channel, message, listener);
