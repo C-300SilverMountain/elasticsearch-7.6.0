@@ -42,6 +42,8 @@ import java.util.Locale;
 
 /**
  * This class starts elasticsearch.
+ * Elasticsearch 类继承了 EnvironmentAwareCommand，而 EnvironmentAwareCommand 继承了 Command
+ * 所以 Elasticsearch 可以解析命令行参数，同时 Elasticsearch 还负责加载配置等工作
  */
 class Elasticsearch extends EnvironmentAwareCommand {
 
@@ -58,6 +60,8 @@ class Elasticsearch extends EnvironmentAwareCommand {
 //                //等同下面代码，啥也不干
 //            }
 //        });
+        //调用 Elasticsearch 构造方法时，主要解析了一些 命令行传入的参数，如 V（版本）、d（后台运行）、p（pid文件）、q（退出）等，
+        // 需要注意的是此处的 super 函数是啥都没有干的(大括号)。而在 super（EnvironmentAwareCommand构造函数）里，主要是设置 settingOption，所以命令行的 ES 参数需要以 -Ees.path.home=/es/home 这样子来设定。
         super("Starts Elasticsearch", () -> {}); // we configure logging later so we override the base class from configuring logging
         versionOption = parser.acceptsAll(Arrays.asList("V", "version"),
             "Prints Elasticsearch version information and exits");
@@ -79,20 +83,21 @@ class Elasticsearch extends EnvironmentAwareCommand {
      * Main entry point for starting elasticsearch //一个 REST 请求最终会在对应的 Transport*Action 的类中处理
      */
     public static void main(final String[] args) throws Exception {
-        overrideDnsCachePolicyProperties();
+        overrideDnsCachePolicyProperties(); //重写 DNS 缓存时间
         /*
          * We want the JVM to think there is a security manager installed so that if internal policy decisions that would be based on the
          * presence of a security manager or lack thereof act as if there is a security manager present (e.g., DNS cache policy). This
          * forces such policies to take effect immediately.
          */
+        //创建空的 SecurityManager 安全管理器,授予所有权限，在后续执行中再为这个安全管理器设置所需要的权限
         System.setSecurityManager(new SecurityManager() {
-
             @Override
             public void checkPermission(Permission perm) {
                 // grant all permissions so that we can later set the security manager to the one that we want
             }
 
         });
+        //注册错误日志监听器,安装监听器可以记录 在加载 log4j 配置前的启动错误信息，如果启动有错误将会停止启动并且显示出来
         LogConfigurator.registerErrorListener();
         //猜想：创建一个实例，调用main，目的是适配单机环境下启动多个实例吧！！
         final Elasticsearch elasticsearch = new Elasticsearch();

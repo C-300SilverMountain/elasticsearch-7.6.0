@@ -63,3 +63,10 @@ Content-Type: application/json
 	}
 }
 ~~~
+
+# 扩展
+[1] 向量计算相识度：https://github.com/lior-k/fast-elasticsearch-vector-scoring
+[2] 向量检索: https://blog.csdn.net/devcloud/article/details/133996098
+[3] 使用脚本插件修改打分: https://blog.csdn.net/weixin_36340771/article/details/122613681
+[4] 基于 elasticsearch 的向量排序实现: https://www.4wei.cn/archives/1002801
+[5] 基于ES的aliyun-knn插件: https://elasticsearch.cn/article/13689

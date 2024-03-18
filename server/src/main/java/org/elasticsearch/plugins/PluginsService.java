@@ -119,6 +119,7 @@ public class PluginsService {
         for (Class<? extends Plugin> pluginClass : classpathPlugins) {
             //通过java原生反射生成对象
             Plugin plugin = loadPlugin(pluginClass, settings, configPath);
+            //读取 plugin-descriptor.properties 文件中的type、description、version、name、classname 等信息，封装成为一个 PluginInfo 实例
             PluginInfo pluginInfo = new PluginInfo(pluginClass.getName(), "classpath plugin", "NA", Version.CURRENT, "1.8",
                                                    pluginClass.getName(), Collections.emptyList(), false);
             if (logger.isTraceEnabled()) {

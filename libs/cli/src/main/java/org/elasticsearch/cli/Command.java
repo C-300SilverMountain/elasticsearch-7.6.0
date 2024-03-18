@@ -82,12 +82,13 @@ public abstract class Command implements Closeable {
                     }
                 }
             });
+            //注册了一个 ShutdownHook，其作用是在系统关闭的时候捕获 IOException 并且进行输出
             Runtime.getRuntime().addShutdownHook(shutdownHookThread);
         }
         //启动之前执行自定义代码，这里是执行空逻辑
         beforeMain.run();
 
-        try {
+        try { //调用 Command.mainWithoutErrorHandling 函数进行命令行参数解析，最终这个函数在解析完命令行参数后调用了 EnvironmentAwareCommand.execute 函数
             mainWithoutErrorHandling(args, terminal);
         } catch (OptionException e) {
             // print help to stderr on exceptions
@@ -122,7 +123,7 @@ public abstract class Command implements Closeable {
         } else {
             terminal.setVerbosity(Terminal.Verbosity.NORMAL);
         }
-
+        //最终调用EnvironmentAwareCommand.execute 函数
         execute(terminal, options);
     }
 

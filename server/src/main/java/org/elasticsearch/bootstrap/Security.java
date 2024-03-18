@@ -118,6 +118,8 @@ final class Security {
         //保证运行发行版的时候，加载的是 lib 目录里的 jar，而通过 idea 运行的时候加载的是 libs 里的是编译好的 class 文件：
         // enable security policy: union of template and environment-based paths, and possibly plugin permissions
         Map<String, URL> codebases = getCodebaseJarMap(JarHell.parseClassPath());
+        //调用 Policy.setPolicy 方法把 Policy 进行重置
+        //在 ESPolicy 中加载 server\src\main\resources\org\elasticsearch\bootstrap\security.policy 文件
         Policy.setPolicy(new ESPolicy(codebases, createPermissions(environment), getPluginPermissions(environment), filterBadDefaults));
 
         // enable security manager

@@ -88,7 +88,7 @@ final class Bootstrap {
                 }
             }
         }, "elasticsearch[keepAlive/" + Version.CURRENT + "]");
-        keepAliveThread.setDaemon(false);
+        keepAliveThread.setDaemon(false); //设置为非守护线程：https://blog.csdn.net/yang2812098/article/details/87651721
         // keep this thread alive (non daemon thread) until we shutdown
         // 一句话概括就是： ShutdownHook允许开发人员在JVM关闭时执行相关的代码。
         //see: https://blog.csdn.net/yangshangwei/article/details/102583944
@@ -195,7 +195,7 @@ final class Bootstrap {
         //调用 initializeProbes() 进行初始化探针操作，主要用于操作系统负载监控、jvm 信息获取、进程相关信息获取。
         // initialize probes before the security manager is installed
         initializeProbes();
-        //注册关闭资源的 ShutdownHook
+        //注册关闭资源的 ShutdownHook,注册一个 ShutdownHook，用于在系统关闭的时候关闭相关的 IO 流、日志上下文
         if (addShutdownHook) {
             // 一句话概括就是： ShutdownHook允许开发人员在JVM关闭时，执行相关的代码。
             //see: https://blog.csdn.net/yangshangwei/article/details/102583944
@@ -334,8 +334,9 @@ final class Bootstrap {
         //ES 大多数配置都是明文保存的，但是像 X-Pack 中的 security 配置需要进行加密保存，所以这些配置信息就是保存在 elasticsearch.keystore 中
         final SecureSettings keystore = loadSecureSettings(initialEnv);
         //为啥重新又生成？大概是因为配置隔离。而且执行初始化所需部分参数，initialEnv未读入
+        //根据保存初始化配置的 initialEnv 和 安全配置 keystore 调用 createEnvironment 重新创建Environment
         final Environment environment = createEnvironment(pidFile, keystore, initialEnv.settings(), initialEnv.configFile());
-
+        //设置节点名称
         LogConfigurator.setNodeName(Node.NODE_NAME_SETTING.get(environment.settings()));
         try {
             //日志插件初始化。 调用 LogConfigurator.configure 加载 log4j2.properties 文件中的相关配置，然后配置 log4j 的属性。
@@ -381,6 +382,7 @@ final class Bootstrap {
             //通过 Thread.setDefaultUncaughtExceptionHandler 设置了一个 ElasticsearchUncaughtExceptionHandler 未捕获异常处理程序。
             // Thread.UncaughtExceptionHandler 是当线程由于未捕获的异常而突然终止时调用的处理程序接口。
             // 在多线程的环境下，主线程无法捕捉其他线程产生的异常，这时需要通过实现 UncaughtExceptionHandler 来捕获其他线程产生但又未被捕获的异常。
+            //安装未捕获异常的处理程序
             Thread.setDefaultUncaughtExceptionHandler(new ElasticsearchUncaughtExceptionHandler());
 
             //重点：
@@ -390,6 +392,7 @@ final class Bootstrap {
             //创建节点的运行环境。
             //创建线程池和 NodeClient 来执行各个Action。
             //初始化 HTTP Handlers 来处理 REST 请求。
+            //通过调用 INSTANCE.setup(true, environment) 为创建 Node 对象实例做一些准备工作
             INSTANCE.setup(true, environment);
 
             try {

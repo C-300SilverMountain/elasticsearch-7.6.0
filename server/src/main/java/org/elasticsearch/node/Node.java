@@ -250,7 +250,7 @@ public class Node implements Closeable {
     }, Setting.Property.NodeScope);
 
     private static final String CLIENT_TYPE = "node";
-
+    //设置节点的生命周期
     private final Lifecycle lifecycle = new Lifecycle();
 
     /**
@@ -290,12 +290,14 @@ public class Node implements Closeable {
                 .put(Client.CLIENT_TYPE_SETTING_S.getKey(), CLIENT_TYPE).build();
 
             //准备创建节点所需的参数值，且对数据目录加锁
+            //创建 NodeEnvironment,此过程会生成 NodeId
             nodeEnvironment = new NodeEnvironment(tmpSettings, environment);
             resourcesToClose.add(nodeEnvironment);
             logger.info("node name [{}], node ID [{}], cluster name [{}]",
                     NODE_NAME_SETTING.get(tmpSettings), nodeEnvironment.nodeId(),
                     ClusterName.CLUSTER_NAME_SETTING.get(tmpSettings).value());
             //各种信息的打印输出和已经丢弃的旧版配置项的检查与提示
+            //打印 JVM 相关的信息
             final JvmInfo jvmInfo = JvmInfo.jvmInfo();
             logger.info(
                 "version[{}], pid[{}], build[{}/{}/{}/{}], OS[{}/{}/{}], JVM[{}/{}/{}/{}]",
@@ -326,6 +328,7 @@ public class Node implements Closeable {
             }
             // 平台插件化主要靠他，基本流程：1、读取插件配置信息  2、从jar包加载class，执行初始化
             //创建插件服务。包含modulesDirectory（自带）和pluginsDirectory（用户自定义）
+            //PluginsService 实例化的过程中主要是加载 modules 目录中的模块和加载 plugins 目录中已经安装的插件
             this.pluginsService = new PluginsService(tmpSettings, environment.configFile(), environment.modulesFile(),
                 environment.pluginsFile(), classpathPlugins);
             final Settings settings = pluginsService.updatedSettings();
@@ -346,6 +349,11 @@ public class Node implements Closeable {
 
             final List<ExecutorBuilder<?>> executorBuilders = pluginsService.getExecutorBuilders(settings);
             //ES 线程池。 ThreadPool 中定义了 4 中线程池类型
+            //线程池的类型有：
+            //direct，执行器不支持关闭的线程。
+            //fixed，线程池拥有固定数量的线程，当一个任务无法分配一条线程时会被排队处理。
+            //fixed_auto_queue_size，和 fixed 类似，但是任务队列会根据 Little’s Law 自动调整。8.0 后将被移除。
+            //scaling， 线程池中线程的数量可变，线程的数量在 core 和 max 间变化，使用 keep_alive 参数可以控制线程在线程池中的空闲时间。
             // see: https://www.elastic.co/guide/en/elasticsearch/reference/7.13/modules-threadpool.html#fixed-thread-pool
             final ThreadPool threadPool = new ThreadPool(settings, executorBuilders.toArray(new ExecutorBuilder[0]));
             resourcesToClose.add(() -> ThreadPool.terminate(threadPool, 10, TimeUnit.SECONDS));
@@ -358,7 +366,9 @@ public class Node implements Closeable {
             for (final ExecutorBuilder<?> builder : threadPool.builders()) {
                 additionalSettings.addAll(builder.getRegisteredSettings());
             }
-            client = new NodeClient(settings, threadPool);//NodeClient 用于执行本地的 actions 的，并且各个节点间的交互是通过 NodeClient 来进行的。
+            //NodeClient 用于执行本地的 actions，并且各个节点间的交互是通过 NodeClient 来进行
+            //action 的类型定义在 ActionType
+            client = new NodeClient(settings, threadPool);
             final ResourceWatcherService resourceWatcherService = new ResourceWatcherService(settings, threadPool);
             //创建各个模块和服务
             final ScriptModule scriptModule = new ScriptModule(settings, pluginsService.filterPlugins(ScriptPlugin.class));

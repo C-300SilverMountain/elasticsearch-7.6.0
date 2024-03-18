@@ -79,11 +79,13 @@ public abstract class EnvironmentAwareCommand extends Command {
             settings.put(kvp.key, kvp.value);
         }
 
-        //从启动参数中读取指定配置参数值
+        //从启动参数中读取指定配置参数值，确保 es.path.data、es.path.home、es.path.logs 这几个路径设置的存在
         putSystemPropertyIfSettingIsMissing(settings, "path.data", "es.path.data");
         putSystemPropertyIfSettingIsMissing(settings, "path.home", "es.path.home");
         putSystemPropertyIfSettingIsMissing(settings, "path.logs", "es.path.logs");
-        //创建Environment，代表各种配置参数值
+        //createEnv: 加载 elasticsearch.yml 配置文件
+        //createEnv 函数最终调用了 InternalSettingsPreparer.prepareEnvironment 来加载 elasticsearch.yml 配置文件，并且创建了 command 运行的环境：Environment 对象
+        //最后调用 Elasticsearch.execute 函数。创建Environment，代表各种配置参数值
         execute(terminal, options, createEnv(settings));
     }
 
