@@ -94,8 +94,15 @@ public class TransportGetAction extends TransportSingleShardAction<GetRequest, G
         }
     }
 
+    /**
+     * 在当前分片读取数据逻辑
+     * @param request
+     * @param shardId
+     * @return
+     */
     @Override
     protected GetResponse shardOperation(GetRequest request, ShardId shardId) {
+        //shardOperation 先获取了对应的 IndexShard，然后检查是否需要进行 refresh 操作，这里需要注意的是，默认的情况下，Get 请求的 refresh 参数是 false 的，而 realtime 参数则为 true
         IndexService indexService = indicesService.indexServiceSafe(shardId.getIndex());
         IndexShard indexShard = indexService.getShard(shardId.id()); //获取了对应的 IndexShard
         //检查是否需要进行 refresh 操作

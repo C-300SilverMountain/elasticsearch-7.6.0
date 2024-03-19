@@ -578,6 +578,8 @@ public class TransportService extends AbstractLifecycleComponent implements Tran
             //通过跟踪 sendRequestInternal 方法可以知道，最终处理转发请求的是 connection.sendRequest，
             // 当节点为本地的时候，connection.sendRequest 调用的是 localNodeConnection 的 sendRequest，而这个方法最终调用的是 sendLocalRequest。
             // 而当 node 为非本地节点时， connection.sendRequest 调用的的是 TcpTransport.sendRequest，此时会进行发送网络请求到目标节点进行处理。
+
+            //sendRequest 最终调用了 asyncSender.sendRequest
             sendRequest(connection, action, request, TransportRequestOptions.EMPTY, handler);
         } catch (NodeNotConnectedException ex) {
             // the caller might not handle this so we invoke the handler
@@ -603,6 +605,8 @@ public class TransportService extends AbstractLifecycleComponent implements Tran
                                                                 final TransportRequestOptions options,
                                                                 TransportResponseHandler<T> handler) {
         try {
+            //interceptor.interceptSender(this::sendRequestInternal)
+            //最终会调用sendRequestInternal
             asyncSender.sendRequest(connection, action, request, options, handler);
         } catch (NodeNotConnectedException ex) {
             // the caller might not handle this so we invoke the handler
@@ -615,7 +619,8 @@ public class TransportService extends AbstractLifecycleComponent implements Tran
      * @throws NodeNotConnectedException if the given node is not connected
      */
     public Transport.Connection getConnection(DiscoveryNode node) {
-        if (isLocalNode(node)) { //如果为本地节点返回 localNodeConnection，否则在 connectionManager 中获取对应节点的 Connection 实例。
+        //如果为本地节点返回 localNodeConnection，否则在 connectionManager 中获取对应节点的 Connection 实例。
+        if (isLocalNode(node)) {
             return localNodeConnection;
         } else {
             return connectionManager.getConnection(node);
@@ -658,6 +663,17 @@ public class TransportService extends AbstractLifecycleComponent implements Tran
 
     }
 
+    /**
+     * sendRequestInternal 方法主要做了以下几件事：
+     * 1、创建 ResponseContext 并加入到 responseHandlers 中。
+     * 2、产生一个 requestId。
+     * 3、调用 connection.sendRequest。
+     *
+     * 通过跟踪 sendRequestInternal 方法可以知道:
+     * 最终处理转发请求的是 connection.sendRequest，
+     * 当节点为本地的时候，connection.sendRequest 调用的是 localNodeConnection 的 sendRequest，而这个方法最终调用的是 sendLocalRequest。
+     * 而当 node 为非本地节点时， connection.sendRequest 调用的的是 TcpTransport.sendRequest，此时会进行发送网络请求到目标节点进行处理。
+     */
     private <T extends TransportResponse> void sendRequestInternal(final Transport.Connection connection, final String action,
                                                                    final TransportRequest request,
                                                                    final TransportRequestOptions options,
@@ -690,7 +706,8 @@ public class TransportService extends AbstractLifecycleComponent implements Tran
             if (timeoutHandler != null) {
                 assert options.timeout() != null;
                 timeoutHandler.scheduleTimeout(options.timeout());
-            }//最后：将请求封装成task，存入队列，等待发出去。注：发出去并不会阻塞等待响应结果，但却会拿到ACK（TCP）
+            }
+            //最后：将请求封装成task，存入队列，等待发出去。注：发出去并不会阻塞等待响应结果，但却会拿到ACK（TCP）
             connection.sendRequest(requestId, action, request, options); // local node optimization happens upstream
         } catch (final Exception e) {
             // usually happen either because we failed to connect to the node

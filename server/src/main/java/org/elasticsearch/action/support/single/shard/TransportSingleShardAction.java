@@ -164,7 +164,8 @@ public abstract class TransportSingleShardAction<Request extends SingleShardRequ
                 concreteSingleIndex = request.index();
             }
             this.internalRequest = new InternalRequest(request, concreteSingleIndex);
-            resolveRequest(clusterState, internalRequest); //解析请求，更新指定的 routing。
+            //解析请求，更新指定的 routing。
+            resolveRequest(clusterState, internalRequest);
             //再次检查请求是否读阻塞，如果是读阻塞则抛出异常。Why?
             blockException = checkRequestBlock(clusterState, internalRequest);
             if (blockException != null) {
@@ -174,10 +175,17 @@ public abstract class TransportSingleShardAction<Request extends SingleShardRequ
             this.shardIt = shards(clusterState, internalRequest);
         }
 
+        /**
+         * 在协调节点，如果计算出来的目标节点为本节点则直接读取数据，否则转发请求到对应的节点上进行处理。
+         * 调用 AsyncSingleAction 实例的 start 方法开始处理请求转发
+         * AsyncSingleAction.start = TransportSingleShardAction.start
+         */
         public void start() {
             //如果 shardIt 为空的时候，调用 transportService.sendRequest，并且此时的 node 为 localNode。
             // 而当找到 shardIt 的时候，则调用 perform 方法
-            if (shardIt == null) { //从本地节点 读取数据
+
+            //1、从本地节点 读取数据
+            if (shardIt == null) {
                 // just execute it on the local node
                 final Writeable.Reader<Response> reader = getResponseReader();
                 transportService.sendRequest(clusterService.localNode(), transportShardAction, internalRequest.request(),
@@ -206,6 +214,8 @@ public abstract class TransportSingleShardAction<Request extends SingleShardRequ
                 //从远程节点 读取数据
                 perform(null);
             }
+            // 综上所述，
+            // 最终不管哪种情况都会调用 transportService.sendRequest 方法，并且通过代码发现它们都注册了一个 TransportResponseHandler 来处理返回的内容。
         }
 
         private void onFailure(ShardRouting shardRouting, Exception e) {
@@ -223,6 +233,7 @@ public abstract class TransportSingleShardAction<Request extends SingleShardRequ
                 this.lastFailure = currentFailure;
             }
             //目标分片
+            //首先从 shardIt 获取 ShardRouting，并且判断其是否为空
             final ShardRouting shardRouting = shardIt.nextOrNull();
             if (shardRouting == null) {
                 Exception failure = lastFailure;
@@ -237,10 +248,12 @@ public abstract class TransportSingleShardAction<Request extends SingleShardRequ
                 return;
             }
             //目标分片所在的节点
+            //根据 ShardRouting 的当前 node id 获取 DiscoveryNode，并且判断其是否为空。
             DiscoveryNode node = nodes.get(shardRouting.currentNodeId());
             if (node == null) {
                 onFailure(shardRouting, new NoShardAvailableActionException(shardRouting.shardId()));
-            } else {//用 shardRouting.shardId 设置 internalShardId。
+            } else {
+                //用 shardRouting.shardId 设置 internalShardId。
                 internalRequest.request().internalShardId = shardRouting.shardId();
                 if (logger.isTraceEnabled()) {
                     logger.trace(
@@ -249,7 +262,8 @@ public abstract class TransportSingleShardAction<Request extends SingleShardRequ
                             internalRequest.request().internalShardId,
                             node
                     );
-                }//调用 transportService.sendRequest，此时的 node 为计算出来的 DiscoveryNode。
+                }
+                //调用 transportService.sendRequest，此时的 node 为计算出来的 DiscoveryNode。
                 final Writeable.Reader<Response> reader = getResponseReader();
                 transportService.sendRequest(node, transportShardAction, internalRequest.request(),
                     new TransportResponseHandler<Response>() {
@@ -293,7 +307,8 @@ public abstract class TransportSingleShardAction<Request extends SingleShardRequ
         public void messageReceived(final Request request, final TransportChannel channel, Task task) throws Exception {
             if (logger.isTraceEnabled()) {
                 logger.trace("executing [{}] on shard [{}]", request, request.internalShardId);
-            }//其负责读取数据并且包装结果进行返回：
+            }
+            //其负责读取数据并且包装结果进行返回：
             asyncShardOperation(request, request.internalShardId, new ChannelActionListener<>(channel, transportShardAction, request));
         }
     }

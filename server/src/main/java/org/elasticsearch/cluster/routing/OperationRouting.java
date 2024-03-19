@@ -104,6 +104,7 @@ public class OperationRouting {
     // 最后再调用 preferenceActiveShardIterator 方法根据 preference（优先级） 参数是否存在分别获取对应的 Shard 列表。
     public ShardIterator getShards(ClusterState clusterState, String index, String id, @Nullable String routing,
                                    @Nullable String preference) {
+        //调用 preferenceActiveShardIterator 方法根据 preference（优先级） 参数是否存在分别获取对应的 Shard 列表
         return preferenceActiveShardIterator(shards(clusterState, index, id, routing), clusterState.nodes().getLocalNodeId(),
             clusterState.nodes(), preference, null, null);
     }
@@ -272,7 +273,9 @@ public class OperationRouting {
     }
 
     protected IndexShardRoutingTable shards(ClusterState clusterState, String index, String id, String routing) {
+        //计算得到 shardId
         int shardId = generateShardId(indexMetaData(clusterState, index), id, routing);
+        //根据计算出来的 shardId 从集群元数据的 routing table 中获取存储此文档的 Shard 路由表信息
         return clusterState.getRoutingTable().shardRoutingTable(index, shardId);
     }
 
@@ -283,6 +286,9 @@ public class OperationRouting {
 
     public static int generateShardId(IndexMetaData indexMetaData, @Nullable String id, @Nullable String routing) {
         final String effectiveRouting;
+        //partitionOffset 变量需要注意，当我们写入文档的时候，如果使用 ES 的随机 id 和 hash 算法的话，可以保证文档被均匀分配到各个主分片中，避免出现数据倾斜。
+        // 但如果我们使用自定义的文档 id 或者 routing key 的时候，是没法保证的
+        // https://www.elastic.co/guide/en/elasticsearch/reference/7.13/index-modules.html#routing-partition-size
         final int partitionOffset;
         //当 routing 请求参数没有设置的时候，effectiveRouting 的值为文档 id，否则为 routing。
         if (routing == null) {
@@ -310,8 +316,28 @@ public class OperationRouting {
         return calculateScaledShardId(indexMetaData, effectiveRouting, partitionOffset);
     }
 
+    /**
+     * 实际上 ES 是通过文档 Id 或者 routing key 计算出到底要到哪个Shard 上获取数据的。
+     * @param indexMetaData
+     * @param effectiveRouting
+     * @param partitionOffset
+     * @return
+     */
     private static int calculateScaledShardId(IndexMetaData indexMetaData, String effectiveRouting, int partitionOffset) {
+        //根据一下代码，最终整理成公式如下：
+        //A:
+        //# partitionOffset = 0 的时候
+        //# effectiveRouting 为文档id 或者 routing key
+        //1、shardId = (hash(effectiveRouting) % num_primary_shards) / RoutingFactor
+
+        //B:
+        //# partitionOffset = hash(id) % routing_partition_size
+        //2、shardId = ((hash(effectiveRouting) + partitionOffset) % num_primary_shards) / RoutingFactor
+
         final int hash = Murmur3HashFunction.hash(effectiveRouting) + partitionOffset;
+
+        //为什么增加了 partitionOffset 可以降低出现数据倾斜的风险呢？
+        //partitionOffset 改变了是否会改变计算出的 shardId，或者说 routing_partition_size 改变后会改变 shardId 吗？
 
         // we don't use IMD#getNumberOfShards since the index might have been shrunk such that we need to use the size
         // of original index to hash documents

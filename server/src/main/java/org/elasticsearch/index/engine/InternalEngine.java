@@ -714,6 +714,7 @@ public class InternalEngine extends Engine {
                     }
                     //最后调用 refreshIfNeeded 执行 refresh 操作：
                     assert versionValue.seqNo >= 0 : versionValue;
+                    //但并不是每次都执行 refresh 操作的，只有 lastRefreshedCheckpoint < requestingSeqNo 才会执行 refresh 操作，所以这个 lastRefreshedCheckpoint 其实应该与 SeqNo 相关的
                     refreshIfNeeded("realtime_get", versionValue.seqNo);
                 }
                 scope = SearcherScope.INTERNAL;
@@ -2763,10 +2764,11 @@ public class InternalEngine extends Engine {
 
 //
 //     * Refresh this engine **internally** iff the requesting seq_no is greater than the last refreshed checkpoint.
-//     * 并不是每次都执行 refresh 操作的，只有 lastRefreshedCheckpoint \< requestingSeqNo 才会执行 refresh 操作，所以这个 lastRefreshedCheckpoint 其实应该与 SeqNo 相关的
-//     * 那为什么要判断 lastRefreshedCheckpoint \< requestingSeqNo 这个条件两次，并且加锁呢？
+//     * 并不是每次都执行 refresh 操作的，只有 lastRefreshedCheckpoint < requestingSeqNo 才会执行 refresh 操作，所以这个 lastRefreshedCheckpoint 其实应该与 SeqNo 相关的
+//     * 那为什么要判断 lastRefreshedCheckpoint < requestingSeqNo 这个条件两次，并且加锁呢？
 //     * 其实跟多线程操作有关，细想一下就知道，在加锁后再次判断条件时有可能不成立了，因为可能有其它线程已经执行了 refresh，所以需要再判断一次。
 //     * 那不做第一次判断可以吗？我个人觉得可以，我觉得这里应该是为了提高效率才这样做的。
+    // 所以，Get API 默认的情况下是实时的，系统通过tranlog 或 进行 refresh 操作来保证 Get API 的实时性。
     protected final void refreshIfNeeded(String source, long requestingSeqNo) {
         if (lastRefreshedCheckpoint() < requestingSeqNo) {
             synchronized (refreshIfNeededMutex) {

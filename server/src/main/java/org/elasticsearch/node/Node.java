@@ -817,7 +817,9 @@ public class Node implements Closeable {
                 }
             }
         }
-        //提供 REST 接口服务。开启 HttpServerTransport，并且绑定监听地址，接收 REST 请求。
+        //提供 REST 接口服务。开启 HttpServerTransport，并且绑定监听地址，接收 REST 请求，（即用户请求）
+        //实际执行以下两个类之一：Netty4HttpServerTransport 或 SecurityNetty4HttpServerTransport
+        //真正处理用户请求的类：Netty4HttpRequestHandler
         injector.getInstance(HttpServerTransport.class).start();
 
         if (WRITE_PORTS_FILE_SETTING.get(settings())) {
