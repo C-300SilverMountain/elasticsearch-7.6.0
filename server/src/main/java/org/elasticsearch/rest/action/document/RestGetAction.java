@@ -26,10 +26,7 @@ import org.elasticsearch.client.node.NodeClient;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.logging.DeprecationLogger;
 import org.elasticsearch.index.VersionType;
-import org.elasticsearch.rest.BaseRestHandler;
-import org.elasticsearch.rest.RestController;
-import org.elasticsearch.rest.RestRequest;
-import org.elasticsearch.rest.RestStatus;
+import org.elasticsearch.rest.*;
 import org.elasticsearch.rest.action.RestActions;
 import org.elasticsearch.rest.action.RestToXContentListener;
 import org.elasticsearch.search.fetch.subphase.FetchSourceContext;
@@ -92,8 +89,21 @@ public class RestGetAction extends BaseRestHandler {
 
         getRequest.fetchSourceContext(FetchSourceContext.parseFromRestRequest(request));
 
+//        return new RestChannelConsumer(){
+//            @Override
+//            public void accept(RestChannel channel) throws Exception {
+//                client.get(getRequest, new RestToXContentListener<GetResponse>(channel) {
+//                    // RestToXContentListener：发送ACK，仅代表发送出去成功，并没有真正拿到数据。
+//                    @Override
+//                    protected RestStatus getStatus(final GetResponse response) {
+//                        return response.isExists() ? OK : NOT_FOUND;
+//                    }
+//                });
+//            }
+//        };
+//        简写成以下代码：
         return channel -> client.get(getRequest, new RestToXContentListener<GetResponse>(channel) {
-            // RestToXContentListener：接收ACK，仅代表发送出去成功，并没有真正拿到数据。
+            // RestToXContentListener：发送ACK，仅代表发送出去成功，并没有真正拿到数据。
             @Override
             protected RestStatus getStatus(final GetResponse response) {
                 return response.isExists() ? OK : NOT_FOUND;

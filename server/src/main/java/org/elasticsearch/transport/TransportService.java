@@ -703,6 +703,7 @@ public class TransportService extends AbstractLifecycleComponent implements Tran
                  */
                 throw new NodeClosedException(localNode);
             }
+            //启动定时任务，定时触发超时事件
             if (timeoutHandler != null) {
                 assert options.timeout() != null;
                 timeoutHandler.scheduleTimeout(options.timeout());
