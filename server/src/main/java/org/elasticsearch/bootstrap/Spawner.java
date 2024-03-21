@@ -69,13 +69,19 @@ final class Spawner implements Closeable {
          * For each module, attempt to spawn the controller daemon. Silently ignore any module that doesn't include a controller for the
          * correct platform.
          */
+        // 为每个模块生成本地控制器进程。忽略不包含用于正确平台的控制器的模块。
+
+        // 查找所有插件的目录
         List<Path> paths = PluginsService.findPluginDirs(environment.modulesFile());
+        // 遍历插件路径下所有文件
         for (final Path modules : paths) {
+            // 访问路径下的Properties配置文件，生成相应的插件信息
             final PluginInfo info = PluginInfo.readFromProperties(modules);
             final Path spawnPath = Platforms.nativeControllerPath(modules);
             if (!Files.isRegularFile(spawnPath)) {
                 continue;
             }
+            // 存在该目录的才需要构建本地控制器
             if (!info.hasNativeController()) {
                 final String message = String.format(
                     Locale.ROOT,
@@ -83,6 +89,7 @@ final class Spawner implements Closeable {
                     modules.getFileName());
                 throw new IllegalArgumentException(message);
             }
+            // 启动一个进程，来控制插件，并将进程id记录。不详细介绍，很少用到
             final Process process = spawnNativeController(spawnPath, environment.tmpFile());
             processes.add(process);
         }

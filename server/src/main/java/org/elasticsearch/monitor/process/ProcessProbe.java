@@ -30,15 +30,28 @@ import static org.elasticsearch.monitor.jvm.JvmInfo.jvmInfo;
 
 public class ProcessProbe {
 
+    /**
+     * ManagementFactory —— java监控和管理JVM: https://blog.csdn.net/hutongling/article/details/106607572
+     *                                       https://blog.csdn.net/GYongJia/article/details/104925362
+     *
+     * 操作系统相关信息
+     */
     private static final OperatingSystemMXBean osMxBean = ManagementFactory.getOperatingSystemMXBean();
 
+    /**
+     * 获取最大文件描述符个数
+     */
     private static final Method getMaxFileDescriptorCountField;
+    /**
+     * 获取已打开的文件描述符个数
+     */
     private static final Method getOpenFileDescriptorCountField;
     private static final Method getProcessCpuLoad;
     private static final Method getProcessCpuTime;
     private static final Method getCommittedVirtualMemorySize;
 
     static {
+        //为啥这么获取参数值：https://stackoverflow.com/questions/45244011/java-getopenfiledescriptorcount-for-windows
         getMaxFileDescriptorCountField = getUnixMethod("getMaxFileDescriptorCount");
         getOpenFileDescriptorCountField = getUnixMethod("getOpenFileDescriptorCount");
         getProcessCpuLoad = getMethod("getProcessCpuLoad");

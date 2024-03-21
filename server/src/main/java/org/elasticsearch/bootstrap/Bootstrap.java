@@ -151,7 +151,7 @@ final class Bootstrap {
         } catch (Exception ignored) {
             // we've already logged this.
         }
-        //尝试设置最大线程数量、最大虚拟内存、最大文件 size。
+        //尝试设置执行本地方法的 最大线程数量、最大虚拟内存、最大文件 size。
         Natives.trySetMaxNumberOfThreads();
         Natives.trySetMaxSizeVirtualMemory();
         Natives.trySetMaxFileSize();
@@ -186,12 +186,15 @@ final class Bootstrap {
             throw new BootstrapException(e);
         }
 
-        //本地资源初始化
+        //配置更新
+        //本地资源初始化，如设置执行本地方法的 最大线程数量、最大虚拟内存、最大文件 size。
+        //调用本地方法的环境初始化，即调用c语言的库 或 jvm的接口，https://www.cnblogs.com/flydean/p/16068839.html
         initializeNatives(
                 environment.tmpFile(),
                 BootstrapSettings.MEMORY_LOCK_SETTING.get(settings),
                 BootstrapSettings.SYSTEM_CALL_FILTER_SETTING.get(settings),
                 BootstrapSettings.CTRLHANDLER_SETTING.get(settings));
+        //配置更新
         //调用 initializeProbes() 进行初始化探针操作，主要用于操作系统负载监控、jvm 信息获取、进程相关信息获取。
         // initialize probes before the security manager is installed
         initializeProbes();
@@ -223,7 +226,8 @@ final class Bootstrap {
         try {
             // look for jar hell
             final Logger logger = LogManager.getLogger(JarHell.class);
-            JarHell.checkJarHell(logger::debug); //通过调用 JarHell.checkJarHell 检查是否有重复的类
+            //通过调用 JarHell.checkJarHell 检查是否有重复的类
+            JarHell.checkJarHell(logger::debug);
         } catch (IOException | URISyntaxException e) {
             throw new BootstrapException(e);
         }
@@ -297,7 +301,8 @@ final class Bootstrap {
     }
 
     private void start() throws NodeValidationException {
-        node.start();//Node.start 主要负责启动各个生命周期组件（LifecycleComponent）和从 Guice（ 也就是 injector）中的获取各个需要启动的服务类实例，然后调用它们的 start 方法。
+        //Node.start 主要负责启动各个生命周期组件（LifecycleComponent）和从 Guice（ 也就是 injector）中的获取各个需要启动的服务类实例，然后调用它们的 start 方法。
+        node.start();
         keepAliveThread.start();
     }
 
@@ -386,7 +391,7 @@ final class Bootstrap {
             Thread.setDefaultUncaughtExceptionHandler(new ElasticsearchUncaughtExceptionHandler());
 
             //重点：
-            //创建一个节点node，代表一个lucene实例
+            //创建一个节点node，代表一个lucene实例，并实例化node依赖的各种服务实例
             //各种信息的打印输出和已经丢弃的旧版配置项的检查与提示。
             //启动插件服务，加载各个插件和模块。
             //创建节点的运行环境。
@@ -402,9 +407,9 @@ final class Bootstrap {
                 throw new BootstrapException(e);
             }
 
-            //创建好node，即初始化本地服务后，再对外暴露端口接收请求！！！
+            //创建好node后，即初始化本地服务后，再对外暴露端口接收请求！！！
             //通讯协议初始化，这里默认是：netty
-            //监听端口，开始接收用户请求
+            //暴露端口，开始接收用户请求
             INSTANCE.start();
 
             // We don't close stderr if `--quiet` is passed, because that
