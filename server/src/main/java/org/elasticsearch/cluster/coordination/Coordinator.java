@@ -535,7 +535,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
         assert Thread.holdsLock(mutex) : "Coordinator mutex not held";
         logger.debug("{}: coordinator becoming CANDIDATE in term {} (was {}, lastKnownLeader was [{}])",
             method, getCurrentTerm(), mode, lastKnownLeader);
-
+        //不是 “候选人”
         if (mode != Mode.CANDIDATE) {
             final Mode prevMode = mode;
             mode = Mode.CANDIDATE;

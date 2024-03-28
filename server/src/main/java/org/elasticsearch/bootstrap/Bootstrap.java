@@ -162,8 +162,11 @@ final class Bootstrap {
 
     static void initializeProbes() {
         // Force probes to be loaded
+        //处理器（CPU）探针
         ProcessProbe.getInstance();
+        //操作系统探针
         OsProbe.getInstance();
+        //jvm探针：java虚拟机监控数据
         JvmInfo.jvmInfo();
     }
 
@@ -187,6 +190,7 @@ final class Bootstrap {
         }
 
         //配置更新
+        //调用本地方法时，需要用到资源（如CPU，内存），所以进行初始化
         //本地资源初始化，如设置执行本地方法的 最大线程数量、最大虚拟内存、最大文件 size。
         //调用本地方法的环境初始化，即调用c语言的库 或 jvm的接口，https://www.cnblogs.com/flydean/p/16068839.html
         initializeNatives(
@@ -202,11 +206,15 @@ final class Bootstrap {
         if (addShutdownHook) {
             // 一句话概括就是： ShutdownHook允许开发人员在JVM关闭时，执行相关的代码。
             //see: https://blog.csdn.net/yangshangwei/article/details/102583944
+            //注册看一个 ShutdownHook，用于在系统关闭的时候关闭相关的 IO 流、日志上下文。
             Runtime.getRuntime().addShutdownHook(new Thread() {
                 @Override
                 public void run() {
                     try {
-                        IOUtils.close(node, spawner);//注册看一个 ShutdownHook，用于在系统关闭的时候关闭相关的 IO 流、日志上下文。
+                        //逐个调用实例的close方法
+                        //node实现了Closeable，Closeable实现了优雅关闭，即自动执行close方法
+                        IOUtils.close(node, spawner);
+                        //日志上下文关闭，资源释放
                         LoggerContext context = (LoggerContext) LogManager.getContext(false);
                         Configurator.shutdown(context);
                         if (node != null && node.awaitClose(10, TimeUnit.SECONDS) == false) {

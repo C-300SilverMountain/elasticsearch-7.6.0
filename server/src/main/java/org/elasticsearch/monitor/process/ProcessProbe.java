@@ -35,6 +35,8 @@ public class ProcessProbe {
      *                                       https://blog.csdn.net/GYongJia/article/details/104925362
      *
      * 操作系统相关信息
+     * ManagementFactory参考文档： https://docs.oracle.com/javase/7/docs/jre/api/management/extension/index.html
+     *                           https://docs.oracle.com/javase/8/docs/jre/api/management/extension/index.html
      */
     private static final OperatingSystemMXBean osMxBean = ManagementFactory.getOperatingSystemMXBean();
 
@@ -52,6 +54,9 @@ public class ProcessProbe {
 
     static {
         //为啥这么获取参数值：https://stackoverflow.com/questions/45244011/java-getopenfiledescriptorcount-for-windows
+        //总的来说，在win中获取到的是：java.lang.management.OperatingSystemMXBean
+        //而在linux中获取到的是：com.sun.management.UnixOperatingSystemMXBean extends com.sun.management.OperatingSystemMXBean
+        //故：用反射调用目标函数
         getMaxFileDescriptorCountField = getUnixMethod("getMaxFileDescriptorCount");
         getOpenFileDescriptorCountField = getUnixMethod("getOpenFileDescriptorCount");
         getProcessCpuLoad = getMethod("getProcessCpuLoad");

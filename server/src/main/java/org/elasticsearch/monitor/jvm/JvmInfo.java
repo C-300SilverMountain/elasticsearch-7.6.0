@@ -52,10 +52,15 @@ public class JvmInfo implements Writeable, ToXContentFragment {
         RuntimeMXBean runtimeMXBean = ManagementFactory.getRuntimeMXBean();
         MemoryMXBean memoryMXBean = ManagementFactory.getMemoryMXBean();
 
+        //堆初始大小：返回Java虚拟机最初从操作系统请求进行内存管理的以字节为单位的内存量。
         long heapInit = memoryMXBean.getHeapMemoryUsage().getInit() < 0 ? 0 : memoryMXBean.getHeapMemoryUsage().getInit();
+        //堆最大大小：返回可用于内存管理的最大内存量（以字节为单位）。
         long heapMax = memoryMXBean.getHeapMemoryUsage().getMax() < 0 ? 0 : memoryMXBean.getHeapMemoryUsage().getMax();
+        //非堆初始大小：
         long nonHeapInit = memoryMXBean.getNonHeapMemoryUsage().getInit() < 0 ? 0 : memoryMXBean.getNonHeapMemoryUsage().getInit();
+        //非堆最大大小：
         long nonHeapMax = memoryMXBean.getNonHeapMemoryUsage().getMax() < 0 ? 0 : memoryMXBean.getNonHeapMemoryUsage().getMax();
+        //最大直接内存大小
         long directMemoryMax = 0;
         try {
             Class<?> vmClass = Class.forName("sun.misc.VM");
@@ -63,11 +68,13 @@ public class JvmInfo implements Writeable, ToXContentFragment {
         } catch (Exception t) {
             // ignore
         }
+        //返回传递给Java虚拟机的输入参数，该参数不包括 main方法的参数。
         String[] inputArguments = runtimeMXBean.getInputArguments().toArray(new String[runtimeMXBean.getInputArguments().size()]);
         Mem mem = new Mem(heapInit, heapMax, nonHeapInit, nonHeapMax, directMemoryMax);
 
         String bootClassPath;
         try {
+            //启动类路径
             bootClassPath = runtimeMXBean.getBootClassPath();
         } catch (UnsupportedOperationException e) {
             // oracle java 9
@@ -77,16 +84,21 @@ public class JvmInfo implements Writeable, ToXContentFragment {
                 bootClassPath = "<unknown>";
             }
         }
+        //类路径
         String classPath = runtimeMXBean.getClassPath();
+        //系统属性
         Map<String, String> systemProperties = Collections.unmodifiableMap(runtimeMXBean.getSystemProperties());
 
+        //https://doc.xuyanwu.cn/jdk1.8-api-zh-cn/java/lang/management/package-summary.html
+        //用于Java虚拟机垃圾收集的管理界面
         List<GarbageCollectorMXBean> gcMxBeans = ManagementFactory.getGarbageCollectorMXBeans();
         String[] gcCollectors = new String[gcMxBeans.size()];
         for (int i = 0; i < gcMxBeans.size(); i++) {
             GarbageCollectorMXBean gcMxBean = gcMxBeans.get(i);
             gcCollectors[i] = gcMxBean.getName();
         }
-
+        //https://doc.xuyanwu.cn/jdk1.8-api-zh-cn/java/lang/management/package-summary.html
+        //内存池的管理界面。
         List<MemoryPoolMXBean> memoryPoolMXBeans = ManagementFactory.getMemoryPoolMXBeans();
         String[] memoryPools = new String[memoryPoolMXBeans.size()];
         for (int i = 0; i < memoryPoolMXBeans.size(); i++) {
@@ -105,6 +117,8 @@ public class JvmInfo implements Writeable, ToXContentFragment {
             @SuppressWarnings("unchecked") Class<? extends PlatformManagedObject> clazz =
                     (Class<? extends PlatformManagedObject>)Class.forName("com.sun.management.HotSpotDiagnosticMXBean");
             Class<?> vmOptionClazz = Class.forName("com.sun.management.VMOption");
+
+            //一个平台管理对象是JMX MXBean在Java平台监控和管理的组成部分。
             PlatformManagedObject hotSpotDiagnosticMXBean = ManagementFactory.getPlatformMXBean(clazz);
             Method vmOptionMethod = clazz.getMethod("getVMOption", String.class);
             Method valueMethod = vmOptionClazz.getMethod("getValue");
@@ -116,6 +130,7 @@ public class JvmInfo implements Writeable, ToXContentFragment {
             }
 
             try {
+                //内存溢出
                 Object onOutOfMemoryErrorObject = vmOptionMethod.invoke(hotSpotDiagnosticMXBean, "OnOutOfMemoryError");
                 onOutOfMemoryError = (String) valueMethod.invoke(onOutOfMemoryErrorObject);
             } catch (Exception ignored) {
@@ -157,6 +172,9 @@ public class JvmInfo implements Writeable, ToXContentFragment {
 
         final boolean bundledJdk = Booleans.parseBoolean(System.getProperty("es.bundled_jdk", Boolean.FALSE.toString()));
         final Boolean usingBundledJdk = bundledJdk ? usingBundledJdk() : null;
+        //getVmName: JVM实现名称
+        //getVmVersion: JVM实现版本
+        //getVmVendor: JVM实现供应商
 
         INSTANCE = new JvmInfo(JvmPid.getPid(), System.getProperty("java.version"), runtimeMXBean.getVmName(), runtimeMXBean.getVmVersion(),
                 runtimeMXBean.getVmVendor(), bundledJdk, usingBundledJdk, runtimeMXBean.getStartTime(), configuredInitialHeapSize,

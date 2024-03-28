@@ -319,9 +319,12 @@ public class SearchModule {
     public SearchModule(Settings settings, boolean transportClient, List<SearchPlugin> plugins) {
         this.settings = settings;
         this.transportClient = transportClient;
+        //建议器
         registerSuggesters(plugins);
+        //高亮
         highlighters = setupHighlighters(settings, plugins);
         registerScoreFunctions(plugins);
+        //操作符分析
         registerQueryParsers(plugins);
         registerRescorers(plugins);
         registerSorts();

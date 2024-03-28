@@ -117,7 +117,7 @@ public class PluginsService {
         // first we load plugins that are on the classpath. this is for tests and transport clients
         //0、内部插件：classpath下插件
         for (Class<? extends Plugin> pluginClass : classpathPlugins) {
-            //通过java原生反射生成对象
+            //通过java原生反射生成 插件实例
             Plugin plugin = loadPlugin(pluginClass, settings, configPath);
             //读取 plugin-descriptor.properties 文件中的type、description、version、name、classname 等信息，封装成为一个 PluginInfo 实例
             PluginInfo pluginInfo = new PluginInfo(pluginClass.getName(), "classpath plugin", "NA", Version.CURRENT, "1.8",
@@ -125,6 +125,7 @@ public class PluginsService {
             if (logger.isTraceEnabled()) {
                 logger.trace("plugin loaded from classpath [{}]", pluginInfo);
             }
+            //将插件信息和 插件实例 捆绑成一个对象
             pluginsLoaded.add(new Tuple<>(pluginInfo, plugin));
             pluginsList.add(pluginInfo);
             pluginsNames.add(pluginInfo.getName());
@@ -134,7 +135,8 @@ public class PluginsService {
         List<PluginInfo> modulesList = new ArrayList<>();
         if (modulesDirectory != null) {
             try {
-                //加载es内部插件，即modules 目录下的jar包（注：这里仅是拿到插件的配置参数，并没有做实例化对象）
+                //读取插件下的plugin-descriptor.properties文件，封装成PluginInfo
+                //加载es内部插件，即modules （注：这里仅是拿到插件的配置参数，并没有做实例化对象）
                 Set<Bundle> modules = getModuleBundles(modulesDirectory);
                 for (Bundle bundle : modules) {
                     modulesList.add(bundle.plugin);
@@ -150,7 +152,8 @@ public class PluginsService {
                 // TODO: remove this leniency, but tests bogusly rely on it
                 if (isAccessibleDirectory(pluginsDirectory, logger)) {
                     checkForFailedPluginRemovals(pluginsDirectory);
-                    //加载用户自定义插件，即 plugins 目录下的jar包
+                    //加载用户自定义插件，即 plugins
+                    //读取插件下的plugin-descriptor.properties文件，封装成PluginInfo
                     Set<Bundle> plugins = getPluginBundles(pluginsDirectory);
                     for (final Bundle bundle : plugins) {
                         pluginsList.add(bundle.plugin);
@@ -164,10 +167,13 @@ public class PluginsService {
         }
         //3、插件类加载+初始化：合并modules和plugins后，统一加载、初始化
         //注：modules和plugins目录下都是插件，只是人为划分：内部插件(modules)和用户自定义插件(plugins)
+        //通过反射生成 Plugin 实例
         List<Tuple<PluginInfo, Plugin>> loaded = loadBundles(seenBundles);
         pluginsLoaded.addAll(loaded);
         //插件类型：modules和plugins，保存时加以区分
+        //插件信息
         this.info = new PluginsAndModules(pluginsList, modulesList);
+        //插件实例
         this.plugins = Collections.unmodifiableList(pluginsLoaded);
 
         // Checking expected plugins
@@ -191,6 +197,7 @@ public class PluginsService {
 
         // we don't log jars in lib/ we really shouldn't log modules,
         // but for now: just be transparent so we can debug any potential issues
+        //将插件信息记录到日志系统中
         logPluginInfo(info.getModuleInfos(), "module", logger);
         logPluginInfo(info.getPluginInfos(), "plugin", logger);
     }
@@ -548,6 +555,8 @@ public class PluginsService {
 
         // create a child to load the plugin in this bundle
         ClassLoader parentLoader = PluginLoaderIndirection.createLoader(getClass().getClassLoader(), extendedLoaders);
+        //bundle.urls是jar转换的
+        //创建ClassLoader后即可，调用ClassLoader.loadClass(className)加载对应的类
         ClassLoader loader = URLClassLoader.newInstance(bundle.urls.toArray(new URL[0]), parentLoader);
 
         // reload SPI with any new services from the plugin
@@ -556,8 +565,9 @@ public class PluginsService {
             // note: already asserted above that extended plugins are loaded and extensible
             ExtensiblePlugin.class.cast(loaded.get(extendedPluginName)).reloadSPI(loader);
         }
-
+        //执行ClassLoader.loadClass(className)加载对应的类
         Class<? extends Plugin> pluginClass = loadPluginClass(bundle.plugin.getClassname(), loader);
+        //反射生成实例
         Plugin plugin = loadPlugin(pluginClass, settings, configPath);
         loaded.put(name, plugin);
         return plugin;

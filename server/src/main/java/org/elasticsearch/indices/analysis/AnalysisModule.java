@@ -77,10 +77,14 @@ public final class AnalysisModule {
     private final AnalysisRegistry analysisRegistry;
 
     public AnalysisModule(Environment environment, List<AnalysisPlugin> plugins) throws IOException {
+        //字符过滤器，详情查看：CommonAnalysisPlugin
         NamedRegistry<AnalysisProvider<CharFilterFactory>> charFilters = setupCharFilters(plugins);
+        //词干提取器
         NamedRegistry<org.apache.lucene.analysis.hunspell.Dictionary> hunspellDictionaries = setupHunspellDictionaries(plugins);
         hunspellService = new HunspellService(environment.settings(), environment, hunspellDictionaries.getRegistry());
+        //停用词过滤器
         NamedRegistry<AnalysisProvider<TokenFilterFactory>> tokenFilters = setupTokenFilters(plugins, hunspellService);
+        //分词器
         NamedRegistry<AnalysisProvider<TokenizerFactory>> tokenizers = setupTokenizers(plugins);
         NamedRegistry<AnalysisProvider<AnalyzerProvider<?>>> analyzers = setupAnalyzers(plugins);
         NamedRegistry<AnalysisProvider<AnalyzerProvider<?>>> normalizers = setupNormalizers(plugins);
@@ -106,12 +110,27 @@ public final class AnalysisModule {
 
     private NamedRegistry<AnalysisProvider<CharFilterFactory>> setupCharFilters(List<AnalysisPlugin> plugins) {
         NamedRegistry<AnalysisProvider<CharFilterFactory>> charFilters = new NamedRegistry<>("char_filter");
+        //这里默认调用的是：CommonAnalysisPlugin，该类位于：analysis-common 插件中
         charFilters.extractAndRegister(plugins, AnalysisPlugin::getCharFilters);
         return charFilters;
     }
 
     public NamedRegistry<org.apache.lucene.analysis.hunspell.Dictionary> setupHunspellDictionaries(List<AnalysisPlugin> plugins) {
         NamedRegistry<org.apache.lucene.analysis.hunspell.Dictionary> hunspellDictionaries = new NamedRegistry<>("dictionary");
+        // 词干提取器，对于效果很重要
+        // 大多数语言的单词都可以 词形变化，比如
+        // 单复数变化 ： fox 、foxes
+        // 时态变化 ： pay 、 paid 、 paying
+        // 性别变化 ： waiter 、 waitress
+        // 动词人称变化 ： hear 、 hears
+        // 代词变化 ： I 、 me 、 my
+        // 不规则变化 ： ate 、 eaten
+        // 情景变化 ： so be it 、 were it so
+        // 词干提取 试图移除单词的变化形式之间的差别，从而达到将每个词都提取为它的词根形式。
+        // 词干提取是一种遭受两种困扰的模糊的技术：
+        // 参考：
+        // https://blog.csdn.net/u012549626/article/details/94389311
+        // https://www.elastic.co/guide/cn/elasticsearch/guide/current/hunspell.html
         hunspellDictionaries.extractAndRegister(plugins, AnalysisPlugin::getHunspellDictionaries);
         return hunspellDictionaries;
     }

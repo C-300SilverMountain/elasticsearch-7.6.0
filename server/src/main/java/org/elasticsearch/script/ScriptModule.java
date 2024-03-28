@@ -80,8 +80,10 @@ public class ScriptModule {
             }
         }
         for (ScriptPlugin plugin : scriptPlugins) {
+            //调用ScriptPlugin.getScriptEngine获取到插件的  ScriptEngine实例
             ScriptEngine engine = plugin.getScriptEngine(settings, contexts.values());
             if (engine != null) {
+                //注：key=ScriptEngine.getType，所以得保证自定义的plugin的type，唯一
                 ScriptEngine existing = engines.put(engine.getType(), engine);
                 if (existing != null) {
                     throw new IllegalArgumentException("scripting language [" + engine.getType() + "] defined for engine [" +

@@ -15,6 +15,9 @@ public class ManagementFactoryTest {
     public static void main(String[] args) {
         /**
          * 操作系统
+         *
+         * api doc参考：https://doc.xuyanwu.cn/jdk1.8-api-zh-cn/java/lang/management/MemoryUsage.html
+         * ManagementFactory参考文档： https://docs.oracle.com/javase/7/docs/jre/api/management/extension/index.html
          */
         System.out.println("*****************操作系统模块*****************");
         OperatingSystemMXBean os = ManagementFactory.getOperatingSystemMXBean();

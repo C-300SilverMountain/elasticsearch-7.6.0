@@ -72,6 +72,10 @@ public class OsProbe {
     private static final Method getSystemCpuLoad;
 
     static {
+        //为啥这么获取参数值：https://stackoverflow.com/questions/45244011/java-getopenfiledescriptorcount-for-windows
+        //总的来说，在win中获取到的是：java.lang.management.OperatingSystemMXBean
+        //而在linux中获取到的是：com.sun.management.UnixOperatingSystemMXBean extends com.sun.management.OperatingSystemMXBean
+        //故：用反射调用目标函数
         getFreePhysicalMemorySize = getMethod("getFreePhysicalMemorySize");
         getTotalPhysicalMemorySize = getMethod("getTotalPhysicalMemorySize");
         getFreeSwapSpaceSize = getMethod("getFreeSwapSpaceSize");
@@ -277,6 +281,8 @@ public class OsProbe {
      * @return the lines from {@code /proc/self/cgroup}
      * @throws IOException if an I/O exception occurs reading {@code /proc/self/cgroup}
      */
+    //在Linux操作系统中，cgroup是一种轻量级的机制，可以对进程进行组织、隔离和限制资源使用等操作.因此，/proc/self/cgroup实际上是查看当前进程所属的cgroup组
+    //https://juejin.cn/s/%2Fproc%2Fself%2Fcgroup%20docker
     @SuppressForbidden(reason = "access /proc/self/cgroup")
     List<String> readProcSelfCgroup() throws IOException {
         final List<String> lines = Files.readAllLines(PathUtils.get("/proc/self/cgroup"));
@@ -304,6 +310,10 @@ public class OsProbe {
      * @return the line from {@code cpuacct.usage}
      * @throws IOException if an I/O exception occurs reading {@code cpuacct.usage} for the control group
      */
+    //cpu使用率：https://www.cnblogs.com/my_life/articles/14945409.html
+    //cpuacct.usage代表使用率
+    //程序中CPU，内存，磁盘资源都是被 cgroup 限制和统计的，所有信息都放在 /sys/fs/cgroup 这个虚拟文件夹里
+    //返回：当前时刻mygroup这个cgroup已使用的cpu纳秒数
     @SuppressForbidden(reason = "access /sys/fs/cgroup/cpuacct")
     String readSysFsCgroupCpuAcctCpuAcctUsage(final String controlGroup) throws IOException {
         return readSingleLine(PathUtils.get("/sys/fs/cgroup/cpuacct", controlGroup, "cpuacct.usage"));
@@ -317,6 +327,7 @@ public class OsProbe {
      * @return the CFS quota period in microseconds
      * @throws IOException if an I/O exception occurs reading {@code cpu.cfs_period_us} for the control group
      */
+    //表示在每个 period（时间间隔）内 cgroup 可以使用的 CPU 时间，文件里数字的单位是微秒
     private long getCgroupCpuAcctCpuCfsPeriodMicros(final String controlGroup) throws IOException {
         return Long.parseLong(readSysFsCgroupCpuAcctCpuCfsPeriod(controlGroup));
     }

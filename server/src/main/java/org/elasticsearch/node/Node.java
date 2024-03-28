@@ -326,12 +326,14 @@ public class Node implements Closeable {
                 logger.debug("using config [{}], data [{}], logs [{}], plugins [{}]",
                     environment.configFile(), Arrays.toString(environment.dataFiles()), environment.logsFile(), environment.pluginsFile());
             }
+            // 三种类型插件：1、位于classpath下  2、module目录下（es内置）  3、plugins目录下
             // 平台插件化主要靠他，基本流程：1、读取插件配置信息  2、从jar包加载class，执行初始化
-            //创建插件服务。包含modulesDirectory（自带）和pluginsDirectory（用户自定义）
-            //PluginsService 实例化的过程中主要是加载 modules 目录中的模块和加载 plugins 目录中已经安装的插件
+            // 创建插件服务。包含modulesDirectory（内置）和pluginsDirectory（用户自定义）
+            // PluginsService 实例化的过程中主要是加载 modules 目录中的模块和加载 plugins 目录中已经安装的插件
             this.pluginsService = new PluginsService(tmpSettings, environment.configFile(), environment.modulesFile(),
                 environment.pluginsFile(), classpathPlugins);
             final Settings settings = pluginsService.updatedSettings();
+            //插件自定义的节点角色,插件的Plugin.getRoles方法可以自定义角色
             final Set<DiscoveryNodeRole> possibleRoles = Stream.concat(
                     DiscoveryNodeRole.BUILT_IN_ROLES.stream(),
                     pluginsService.filterPlugins(Plugin.class)
@@ -346,7 +348,7 @@ public class Node implements Closeable {
             // this is just to makes sure that people get the same settings, no matter where they ask them from
             this.environment = new Environment(settings, environment.configFile()); //创建节点运行需要的运行环境
             Environment.assertEquivalent(environment, this.environment); //通过 Environment.assertEquivalent 函数来保证启动过程中配置没有被更改。
-
+            // 插件自定义的线程池
             final List<ExecutorBuilder<?>> executorBuilders = pluginsService.getExecutorBuilders(settings);
             //ES 线程池。 ThreadPool 中定义了 4 中线程池类型
             //线程池的类型有：
@@ -371,7 +373,9 @@ public class Node implements Closeable {
             client = new NodeClient(settings, threadPool);
             final ResourceWatcherService resourceWatcherService = new ResourceWatcherService(settings, threadPool);
             //创建各个模块和服务
+            //脚本插件模块，通常实现接口：ScriptPlugin
             final ScriptModule scriptModule = new ScriptModule(settings, pluginsService.filterPlugins(ScriptPlugin.class));
+            //语义理解插件
             AnalysisModule analysisModule = new AnalysisModule(this.environment, pluginsService.filterPlugins(AnalysisPlugin.class));
             // this is as early as we can validate settings at this point. we already pass them to ScriptModule as well as ThreadPool
             // so we might be late here already
@@ -389,6 +393,7 @@ public class Node implements Closeable {
             final NetworkService networkService = new NetworkService(
                 getCustomNameResolvers(pluginsService.filterPlugins(DiscoveryPlugin.class)));
 
+            //集群管理插件
             List<ClusterPlugin> clusterPlugins = pluginsService.filterPlugins(ClusterPlugin.class);
             final ClusterService clusterService = new ClusterService(settings, settingsModule.getClusterSettings(), threadPool);
             clusterService.addStateApplier(scriptModule.getScriptService());
@@ -396,6 +401,7 @@ public class Node implements Closeable {
             clusterService.addLocalNodeMasterListener(
                     new ConsistentSettingsService(settings, clusterService, settingsModule.getConsistentSettings())
                             .newHashPublisher());
+            //数据预处理
             final IngestService ingestService = new IngestService(clusterService, threadPool, this.environment,
                 scriptModule.getScriptService(), analysisModule.getAnalysisRegistry(),
                 pluginsService.filterPlugins(IngestPlugin.class), client);
@@ -407,12 +413,13 @@ public class Node implements Closeable {
             for (Module pluginModule : pluginsService.createGuiceModules()) {
                 modules.add(pluginModule);
             }
+            //系统监控服务，如监控jvm、操作系统资源等使用情况
             final MonitorService monitorService = new MonitorService(settings, nodeEnvironment, threadPool, clusterInfoService);
             ClusterModule clusterModule = new ClusterModule(settings, clusterService, clusterPlugins, clusterInfoService);
             modules.add(clusterModule);
             IndicesModule indicesModule = new IndicesModule(pluginsService.filterPlugins(MapperPlugin.class));
             modules.add(indicesModule);
-
+            //搜索模块
             SearchModule searchModule = new SearchModule(settings, false, pluginsService.filterPlugins(SearchPlugin.class));
             //重点：创建断路器；用于预防OOM，注：并不能百分百预防，因为断路器并不是实时计算堆剩余大小，而是通过估算值进行计算。
             CircuitBreakerService circuitBreakerService = createCircuitBreakerService(settingsModule.getSettings(),
@@ -420,7 +427,7 @@ public class Node implements Closeable {
             resourcesToClose.add(circuitBreakerService);
             modules.add(new GatewayModule());
 
-
+            // 缓存收集器
             PageCacheRecycler pageCacheRecycler = createPageCacheRecycler(settings);
             BigArrays bigArrays = createBigArrays(pageCacheRecycler, circuitBreakerService);
             modules.add(settingsModule);
@@ -441,7 +448,9 @@ public class Node implements Closeable {
                     .flatMap(p -> p.getNamedXContent().stream()),
                 ClusterModule.getNamedXWriteables().stream())
                 .flatMap(Function.identity()).collect(toList()));
+
             final MetaStateService metaStateService = new MetaStateService(nodeEnvironment, xContentRegistry);
+            //集群状态持久化服务
             final PersistedClusterStateService lucenePersistedStateFactory
                 = new PersistedClusterStateService(nodeEnvironment, xContentRegistry, bigArrays, clusterService.getClusterSettings(),
                 threadPool::relativeTimeInMillis);
@@ -492,6 +501,7 @@ public class Node implements Closeable {
                 settingsModule.getIndexScopedSettings(), settingsModule.getClusterSettings(), settingsModule.getSettingsFilter(),
                 threadPool, pluginsService.filterPlugins(ActionPlugin.class), client, circuitBreakerService, usageService, clusterService);
             modules.add(actionModule);
+
             //请求总分发器：处理请求的类名以Action结尾：如 *Action，这些类都会注册到RestController，key为路径，value为*Action；
             final RestController restController = actionModule.getRestController();
             final NetworkModule networkModule = new NetworkModule(settings, false, pluginsService.filterPlugins(NetworkPlugin.class),
@@ -540,15 +550,22 @@ public class Node implements Closeable {
                 clusterService.getClusterSettings(), client, threadPool::relativeTimeInMillis, rerouteService);
             clusterInfoService.addListener(diskThresholdMonitor::onNewInfo);
 
+            //Discovery模块负责发现集群中的节点，以及选择主节点。
+            // ES支持多种不同Discovery类型选择，内置的实现有两种：Zen Discovery和Coordinator，其他的包括公有云平台亚马逊的EC2、谷歌的GCE等。
+            //AzureDiscoreyPlugin：微软提供发现插件
+            //Ec2DiscoveryPlugin：亚马逊提供的发现插件
+            //GceDiscoveryPlugin：谷歌提供的发现插件
+            //链接：https://www.jianshu.com/p/d3ad414ed4f7
             final DiscoveryModule discoveryModule = new DiscoveryModule(settings, threadPool, transportService, namedWriteableRegistry,
                 networkService, clusterService.getMasterService(), clusterService.getClusterApplierService(),
                 clusterService.getClusterSettings(), pluginsService.filterPlugins(DiscoveryPlugin.class),
                 clusterModule.getAllocationService(), environment.configFile(), gatewayMetaState, rerouteService);
+
             this.nodeService = new NodeService(settings, threadPool, monitorService, discoveryModule.getDiscovery(),
                 transportService, indicesService, pluginsService, circuitBreakerService, scriptModule.getScriptService(),
                 httpServerTransport, ingestService, clusterService, settingsModule.getSettingsFilter(), responseCollectorService,
                 searchTransportService);
-
+            //搜索服务
             final SearchService searchService = newSearchService(clusterService, indicesService,
                 threadPool, scriptModule.getScriptService(), bigArrays, searchModule.getFetchPhase(),
                 responseCollectorService);
@@ -708,6 +725,7 @@ public class Node implements Closeable {
         }
         //injector: 谷歌提供的轻量级 IOC 库
         logger.info("starting ...");
+        // 启动生命周期组件
         pluginLifecycleComponents.forEach(LifecycleComponent::start);
         // see: https://www.lishuo.net/read/elasticsearch/date-2023.05.24.16.58.21
         injector.getInstance(MappingUpdatedAction.class).setClient(client);
@@ -717,6 +735,7 @@ public class Node implements Closeable {
         injector.getInstance(SnapshotShardsService.class).start(); //此服务在 data node 上运行，并且控制此节点上运行中的分片快照。其负责开启和停止分片级别的快照。
         injector.getInstance(RepositoriesService.class).start(); // 负责维护节点快照存储仓库和提供对存储仓库的访问。
         injector.getInstance(SearchService.class).start(); //提供搜索支持的服务。
+        //启动定期监控系统资源使用情况
         nodeService.getMonitorService().start(); //负责提供操作系统、进程、JVM、文件系统级别的监控服务
 
         final ClusterService clusterService = injector.getInstance(ClusterService.class); // 集群管理服务，负责管理集群状态、处理集群任务、发布集群状态等。
@@ -725,7 +744,7 @@ public class Node implements Closeable {
         final NodeConnectionsService nodeConnectionsService = injector.getInstance(NodeConnectionsService.class);
         nodeConnectionsService.start();
         clusterService.setNodeConnectionsService(nodeConnectionsService); //将 NodeConnectionsService 绑定到 ClusterService 中去
-
+        //通用的资源监控服务
         injector.getInstance(ResourceWatcherService.class).start();
         injector.getInstance(GatewayService.class).start(); //网关服务，负责集群元数据的持久化和恢复。
         //节点发现模块是一个可插拔的模块，其负责发现集群中其他的节点，发布集群状态到所有节点，选举主节点和发布集群状态变更事件。
@@ -779,7 +798,7 @@ public class Node implements Closeable {
         // 选举流程：
         // https://blog.csdn.net/weixin_40318210/article/details/81515809
         // https://blog.csdn.net/kissfox220/article/details/119956861
-        // 调用ZenDiscovery的startInitialJoin()方法开始加入集群并准备进行参与选举。
+        // 默认调用Coordinator的startInitialJoin()方法开始加入集群并准备进行参与选举。
         discovery.startInitialJoin();
         final TimeValue initialStateTimeout = DiscoverySettings.INITIAL_STATE_TIMEOUT_SETTING.get(settings());
         configureNodeAndClusterIdStateListener(clusterService);

@@ -272,7 +272,7 @@ public final class NodeEnvironment  implements Closeable {
             final AtomicReference<IOException> onCreateDirectoriesException = new AtomicReference<>();
             for (int possibleLockId = 0; possibleLockId < maxLocalStorageNodes; possibleLockId++) {
                 try {
-                    //获取数据目录锁权限
+                    //获取节点锁，实际获取多个数据目录的锁权限，即将多个目录的控制权交由当前节点管理（互斥）
                     nodeLock = new NodeLock(possibleLockId, logger, environment,
                         dir -> {
                             try {
@@ -314,16 +314,19 @@ public final class NodeEnvironment  implements Closeable {
             }
 
             //可能会打印相关日志
+            //将数据目录信息打印到日志
             maybeLogPathDetails();
+            //打印jvm相关信息
             maybeLogHeapDetails();
 
             applySegmentInfosTrace(settings);
+            //通过 "创建临时文件" 来验证数据目录是否能够执行 “写” 操作
             assertCanWrite();
-
+            //验证是否能够执行 "move" 命令移动文件
             if (DiscoveryNode.isMasterNode(settings) || DiscoveryNode.isDataNode(settings)) {
                 ensureAtomicMoveSupported(nodePaths);
             }
-
+            //验证当前节点的元数据文件是不存在的，存在则报错
             if (DiscoveryNode.isDataNode(settings) == false) {
                 if (DiscoveryNode.isMasterNode(settings) == false) {
                     ensureNoIndexMetaData(nodePaths);
@@ -331,7 +334,7 @@ public final class NodeEnvironment  implements Closeable {
 
                 ensureNoShardData(nodePaths);
             }
-
+            //当前节点的元数据
             this.nodeMetaData = loadNodeMetaData(settings, logger, nodePaths);
             success = true;
         } finally {
