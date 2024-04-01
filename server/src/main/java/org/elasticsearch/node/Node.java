@@ -670,6 +670,7 @@ public class Node implements Closeable {
         } catch (IOException ex) {
             throw new ElasticsearchException("failed to bind service", ex);
         } finally {
+            //启动失败，回收 “服务” 的资源
             if (!success) {
                 IOUtils.closeWhileHandlingException(resourcesToClose);
             }

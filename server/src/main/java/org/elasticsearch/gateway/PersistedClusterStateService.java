@@ -260,6 +260,7 @@ public class PersistedClusterStateService {
         String nodeId = null;
         Version version = null;
         for (final Path dataPath : dataPaths) {
+            //indexPath案例： /data(根) /nodes/0(一个节点)/_state
             final Path indexPath = dataPath.resolve(METADATA_DIRECTORY_NAME);
             if (Files.exists(indexPath)) {
                 try (DirectoryReader reader = DirectoryReader.open(new SimpleFSDirectory(dataPath.resolve(METADATA_DIRECTORY_NAME)))) {

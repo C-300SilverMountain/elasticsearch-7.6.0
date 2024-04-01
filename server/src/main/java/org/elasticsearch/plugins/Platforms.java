@@ -38,6 +38,7 @@ public class Platforms {
      * The path to the native controller for a plugin with native components.
      */
     public static Path nativeControllerPath(Path plugin) {
+        // 根据系统平台加载不同文件，如windows为 controller.exe, 其他为 contoller
         if (Constants.MAC_OS_X) {
             return plugin
                 .resolve("platform")

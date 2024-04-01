@@ -204,6 +204,9 @@ public final class NodeEnvironment  implements Closeable {
             nodePaths = new NodePath[environment.dataFiles().length];
             locks = new Lock[nodePaths.length];
             try {
+                // 如 dataPaths = ["/data/","/dbtest/"]
+                // 则：nodePaths = ["/data(根) /nodes/0(一个节点)","/dbtest(根) /nodes/0(一个节点)"]
+                // 如何理解：”节点0“ 拥有两个数据目录：/data/ + /dbtest/
                 final Path[] dataPaths = environment.dataFiles();
                 for (int dirIndex = 0; dirIndex < dataPaths.length; dirIndex++) {
                     Path dataDir = dataPaths[dirIndex];
@@ -331,7 +334,7 @@ public final class NodeEnvironment  implements Closeable {
                 if (DiscoveryNode.isMasterNode(settings) == false) {
                     ensureNoIndexMetaData(nodePaths);
                 }
-
+                //验证当前节点的共享数据目录是不存在的，存在则报错
                 ensureNoShardData(nodePaths);
             }
             //当前节点的元数据
@@ -413,7 +416,12 @@ public final class NodeEnvironment  implements Closeable {
      */
     private static NodeMetaData loadNodeMetaData(Settings settings, Logger logger,
                                                  NodePath... nodePaths) throws IOException {
+        // 如 dataPaths = ["/data/","/dbtest/"]
+        // 则：nodePaths = ["/data(根) /nodes/0(一个节点)","/dbtest(根) /nodes/0(一个节点)"]
+        // 如何理解：”节点0“ 拥有两个数据目录：/data/ + /dbtest/
         final Path[] paths = Arrays.stream(nodePaths).map(np -> np.path).toArray(Path[]::new);
+
+        // 加载 【节点级别】 元数据，即目录： ["/data(根) /nodes/0(一个节点)/_state","/dbtest(根) /nodes/0(一个节点)/_state"]
         NodeMetaData metaData = PersistedClusterStateService.nodeMetaData(paths);
         if (metaData == null) {
             // load legacy metadata

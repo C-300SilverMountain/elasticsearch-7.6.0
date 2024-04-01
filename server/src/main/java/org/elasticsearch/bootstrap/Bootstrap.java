@@ -185,7 +185,7 @@ final class Bootstrap {
         Settings settings = environment.settings();
         //See: https://www.lishuo.net/read/elasticsearch/date-2023.05.24.16.58.21
         //spawnNativeControllers 的作用主要是尝试为每个模块（modules 目录下的模块）生成 native 控制器守护进程的。
-        // 生成的进程将通过其 stdin、stdout 和 stderr 流保持与此 JVM 的连接，这个进程不应该写入任何数据到其 stdout 和 stderr，
+        // 【生成的进程将通过其 stdin、stdout 和 stderr 流保持与此 JVM 的连接】，这个进程不应该写入任何数据到其 stdout 和 stderr，
         // 否则如果没有其他线程读取这些 output 数据的话，这个进程将会被阻塞，
         // 为了避免这种情况发生，可以继承 JVM 的 stdout 和 stderr（在标准安装中，它们会被重定向到文件）
         try {
@@ -194,19 +194,21 @@ final class Bootstrap {
             throw new BootstrapException(e);
         }
 
-        //配置更新
+        //配置资源使用约束
         //调用本地方法时，需要用到资源（如CPU，内存），所以进行初始化
-        //本地资源初始化，如设置执行本地方法的 最大线程数量、最大虚拟内存、最大文件 size。
+        //本地资源初始化，如设置执行本地方法的 最大线程数量(MaxNumberOfThreads)、最大虚拟内存、最大文件 size。
         //调用本地方法的环境初始化，即调用c语言的库 或 jvm的接口，https://www.cnblogs.com/flydean/p/16068839.html
         initializeNatives(
             environment.tmpFile(),
             BootstrapSettings.MEMORY_LOCK_SETTING.get(settings),
             BootstrapSettings.SYSTEM_CALL_FILTER_SETTING.get(settings),
             BootstrapSettings.CTRLHANDLER_SETTING.get(settings));
-        //配置更新
-        //调用 initializeProbes() 进行初始化探针操作，主要用于操作系统负载监控、jvm 信息获取、进程相关信息获取。
+
+        // 配置探针，用于系统（OS）监控、jvm监控 等。
         // initialize probes before the security manager is installed
         initializeProbes();
+
+        //【资源回收：当系统宕机时，执行资源回收】
         //注册关闭资源的 ShutdownHook,注册一个 ShutdownHook，用于在系统关闭的时候关闭相关的 IO 流、日志上下文
         if (addShutdownHook) {
             // 一句话概括就是： ShutdownHook允许开发人员在JVM关闭时，执行相关的代码。
@@ -249,7 +251,8 @@ final class Bootstrap {
         IfConfig.logIfNecessary(); //在Debug 模式下以 ifconfig 格式输出网络信息
 
         // install SM after natives, shutdown hooks, etc.
-        try {//加载安全管理器，进行权限认证 通过调用 Security.configure 函数进行安全管理器加载，进行权限认证操作：
+        try {
+            //加载安全管理器，进行权限认证 通过调用 Security.configure 函数进行安全管理器加载，进行权限认证操作：
             Security.configure(environment, BootstrapSettings.SECURITY_FILTER_BAD_DEFAULTS_SETTING.get(settings));
         } catch (IOException | NoSuchAlgorithmException e) {
             throw new BootstrapException(e);
@@ -263,7 +266,8 @@ final class Bootstrap {
             protected void validateNodeBeforeAcceptingRequests(
                 final BootstrapContext context,
                 final BoundTransportAddress boundTransportAddress, List<BootstrapCheck> checks) throws NodeValidationException {
-                //接收外来请求之前，做一下检查工作：如堆内存大小检查
+                //接收外部请求之前，做一下检查工作：如堆内存大小检查
+                //即启动完成之后，先检查系统情况，再真正开放接收请求
                 BootstrapChecks.check(context, boundTransportAddress, checks);
             }
         };

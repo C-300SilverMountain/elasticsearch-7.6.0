@@ -90,6 +90,7 @@ final class Spawner implements Closeable {
                 throw new IllegalArgumentException(message);
             }
             // 启动一个进程，来控制插件，并将进程id记录。不详细介绍，很少用到
+            //module模块
             final Process process = spawnNativeController(spawnPath, environment.tmpFile());
             processes.add(process);
         }
