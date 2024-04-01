@@ -210,6 +210,7 @@ public class KeyStoreWrapper implements SecureSettings {
      * Returns {@code null} if no keystore exists.
      */
     public static KeyStoreWrapper load(Path configDir) throws IOException {
+        //检查配置路径下的 “elasticsearch.keystore” 是否存在
         Path keystoreFile = keystorePath(configDir);
         if (Files.exists(keystoreFile) == false) {
             return null;
@@ -220,6 +221,7 @@ public class KeyStoreWrapper implements SecureSettings {
             ChecksumIndexInput input = new BufferedChecksumIndexInput(indexInput);
             final int formatVersion;
             try {
+                //文件的格式化类型：即文件类型
                 formatVersion = CodecUtil.checkHeader(input, KEYSTORE_FILENAME, MIN_FORMAT_VERSION, FORMAT_VERSION);
             } catch (IndexFormatTooOldException e) {
                 throw new IllegalStateException("The Elasticsearch keystore [" + keystoreFile + "] format is too old. " +
@@ -228,13 +230,14 @@ public class KeyStoreWrapper implements SecureSettings {
                 throw new IllegalStateException("The Elasticsearch keystore [" + keystoreFile + "] format is too new. " +
                     "Are you trying to downgrade? You should delete and recreate it in order to downgrade.", e);
             }
+            //是否有密码
             byte hasPasswordByte = input.readByte();
             boolean hasPassword = hasPasswordByte == 1;
             if (hasPassword == false && hasPasswordByte != 0) {
                 throw new IllegalStateException("hasPassword boolean is corrupt: "
                     + String.format(Locale.ROOT, "%02x", hasPasswordByte));
             }
-
+            //文件类型检查: PKCS12/PBE
             if (formatVersion <= 2) {
                 String type = input.readString();
                 if (type.equals("PKCS12") == false) {
@@ -272,14 +275,17 @@ public class KeyStoreWrapper implements SecureSettings {
                     input.readBytes(keystoreBytes, 0, keystoreLen);
                     output.write(keystoreBytes);
                 }
+                //密码
                 dataBytes = bytes.toByteArray();
             } else {
                 int dataBytesLen = input.readInt();
+                //密码
                 dataBytes = new byte[dataBytesLen];
                 input.readBytes(dataBytes, 0, dataBytesLen);
             }
 
             CodecUtil.checkFooter(input);
+            //formatVersion: 格式化类型   hasPassword: 是否带密码  dataBytes: 密码内容
             return new KeyStoreWrapper(formatVersion, hasPassword, dataBytes);
         }
     }

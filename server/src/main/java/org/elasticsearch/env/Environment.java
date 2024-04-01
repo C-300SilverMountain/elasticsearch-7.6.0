@@ -108,19 +108,20 @@ public class Environment {
         } else {
             throw new IllegalStateException(PATH_HOME_SETTING.getKey() + " is not configured");
         }
-
+        //1、记录配置文件到 Environment.configFile
         if (configPath != null) {
             configFile = configPath.toAbsolutePath().normalize();
         } else {
             configFile = homeFile.resolve("config");
         }
-
+        //2、记录临时文件目录到 Environment.tmpFile
         tmpFile = Objects.requireNonNull(tmpPath);
-
+        //3、记录插件目录到 Environment.pluginsFile
         pluginsFile = homeFile.resolve("plugins");
 
         List<String> dataPaths = PATH_DATA_SETTING.get(settings);
         final ClusterName clusterName = ClusterName.CLUSTER_NAME_SETTING.get(settings);
+        //4、记录多个数据目录到 Environment.dataFiles 数组
         if (DiscoveryNode.nodeRequiresLocalStorage(settings)) {
             if (dataPaths.isEmpty() == false) {
                 dataFiles = new Path[dataPaths.size()];
@@ -138,11 +139,13 @@ public class Environment {
                 throw new IllegalStateException("node does not require local storage yet path.data is set to [" + paths + "]");
             }
         }
+        //5、记录共享数据目录到 Environment.sharedDataFile
         if (PATH_SHARED_DATA_SETTING.exists(settings)) {
             sharedDataFile = PathUtils.get(PATH_SHARED_DATA_SETTING.get(settings)).toAbsolutePath().normalize();
         } else {
             sharedDataFile = null;
         }
+        //6、记录Elasticsearch存储插件仓库信息的目录 到 Environment.repoFiles
         List<String> repoPaths = PATH_REPO_SETTING.get(settings);
         if (repoPaths.isEmpty()) {
             repoFiles = EMPTY_PATH_ARRAY;
@@ -152,22 +155,24 @@ public class Environment {
                 repoFiles[i] = PathUtils.get(repoPaths.get(i)).toAbsolutePath().normalize();
             }
         }
-
+        //7、记录日志目录到 Environment.logsFile
         // this is trappy, Setting#get(Settings) will get a fallback setting yet return false for Settings#exists(Settings)
         if (PATH_LOGS_SETTING.exists(settings)) {
             logsFile = PathUtils.get(PATH_LOGS_SETTING.get(settings)).toAbsolutePath().normalize();
         } else {
             logsFile = homeFile.resolve("logs");
         }
-
+        //8、记录程序id文件目录到 Environment.pidFile
         if (NODE_PIDFILE_SETTING.exists(settings) || PIDFILE_SETTING.exists(settings)) {
             pidFile = PathUtils.get(NODE_PIDFILE_SETTING.get(settings)).toAbsolutePath().normalize();
         } else {
             pidFile = null;
         }
-
+        //8、记录可运行程序目录到 Environment.binFile
         binFile = homeFile.resolve("bin");
+        //9、记录依赖jar包文件目录到 Environment.libFile
         libFile = homeFile.resolve("lib");
+        //10、记录es模块目录到 Environment.modulesFile
         modulesFile = homeFile.resolve("modules");
 
         final Settings.Builder finalSettings = Settings.builder().put(settings);
@@ -192,6 +197,8 @@ public class Environment {
             assert pidFile != null;
             finalSettings.put(Environment.PIDFILE_SETTING.getKey(), pidFile.toString());
         }
+        //最后，将【命令行参数】 + 【必要的文件目录信息】 保存到 Environment.settings
+        //到此，Environment实例算是 “实例化” 完成了
         this.settings = finalSettings.build();
     }
 

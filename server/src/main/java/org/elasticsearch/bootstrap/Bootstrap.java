@@ -74,7 +74,9 @@ final class Bootstrap {
     private final Thread keepAliveThread;
     private final Spawner spawner = new Spawner();
 
-    /** creates a new instance */
+    /**
+     * creates a new instance
+     */
     Bootstrap() {
         keepAliveThread = new Thread(new Runnable() {
             @Override
@@ -100,7 +102,9 @@ final class Bootstrap {
         });
     }
 
-    /** initialize native resources */
+    /**
+     * initialize native resources
+     */
     public static void initializeNatives(Path tmpFile, boolean mlockAll, boolean systemCallFilter, boolean ctrlHandler) {
         final Logger logger = LogManager.getLogger(Bootstrap.class);
 
@@ -120,9 +124,9 @@ final class Bootstrap {
         // mlockall if requested
         if (mlockAll) {
             if (Constants.WINDOWS) {
-               Natives.tryVirtualLock();
+                Natives.tryVirtualLock();
             } else {
-               Natives.tryMlockall();
+                Natives.tryMlockall();
             }
         }
         //如果是运行在 Windows 的话，关闭事件的监听器。
@@ -172,8 +176,9 @@ final class Bootstrap {
 
     /**
      * Environment: 执行初始化时所需的参数，或参数文件
+     *
      * @param addShutdownHook 是否需要JVM关闭时，执行相关的代码
-     * @param environment 略
+     * @param environment     略
      * @throws BootstrapException 略
      */
     private void setup(boolean addShutdownHook, Environment environment) throws BootstrapException {
@@ -194,10 +199,10 @@ final class Bootstrap {
         //本地资源初始化，如设置执行本地方法的 最大线程数量、最大虚拟内存、最大文件 size。
         //调用本地方法的环境初始化，即调用c语言的库 或 jvm的接口，https://www.cnblogs.com/flydean/p/16068839.html
         initializeNatives(
-                environment.tmpFile(),
-                BootstrapSettings.MEMORY_LOCK_SETTING.get(settings),
-                BootstrapSettings.SYSTEM_CALL_FILTER_SETTING.get(settings),
-                BootstrapSettings.CTRLHANDLER_SETTING.get(settings));
+            environment.tmpFile(),
+            BootstrapSettings.MEMORY_LOCK_SETTING.get(settings),
+            BootstrapSettings.SYSTEM_CALL_FILTER_SETTING.get(settings),
+            BootstrapSettings.CTRLHANDLER_SETTING.get(settings));
         //配置更新
         //调用 initializeProbes() 进行初始化探针操作，主要用于操作系统负载监控、jvm 信息获取、进程相关信息获取。
         // initialize probes before the security manager is installed
@@ -219,7 +224,7 @@ final class Bootstrap {
                         Configurator.shutdown(context);
                         if (node != null && node.awaitClose(10, TimeUnit.SECONDS) == false) {
                             throw new IllegalStateException("Node didn't stop within 10 seconds. " +
-                                    "Any outstanding requests or tasks might get killed.");
+                                "Any outstanding requests or tasks might get killed.");
                         }
                     } catch (IOException ex) {
                         throw new ElasticsearchException("failed to stop node", ex);
@@ -291,10 +296,10 @@ final class Bootstrap {
     }
 
     private static Environment createEnvironment(
-            final Path pidFile,
-            final SecureSettings secureSettings,
-            final Settings initialSettings,
-            final Path configPath) {
+        final Path pidFile,
+        final SecureSettings secureSettings,
+        final Settings initialSettings,
+        final Path configPath) {
         Settings.Builder builder = Settings.builder();
         if (pidFile != null) {
             builder.put(Environment.NODE_PIDFILE_SETTING.getKey(), pidFile);
@@ -303,9 +308,10 @@ final class Bootstrap {
         if (secureSettings != null) {
             builder.setSecureSettings(secureSettings);
         }
+        //此时使用上了 “input” 参数，代表用户自定义参数
         return InternalSettingsPreparer.prepareEnvironment(builder.build(), Collections.emptyMap(), configPath,
-                // HOSTNAME is set by elasticsearch-env and elasticsearch-env.bat so it is always available
-                () -> System.getenv("HOSTNAME"));
+            // HOSTNAME is set by elasticsearch-env and elasticsearch-env.bat so it is always available
+            () -> System.getenv("HOSTNAME"));
     }
 
     private void start() throws NodeValidationException {
@@ -332,10 +338,11 @@ final class Bootstrap {
      * This method is invoked by {@link Elasticsearch#main(String[])} to startup elasticsearch.
      */
     static void init(
-            final boolean foreground,
-            final Path pidFile,
-            final boolean quiet,
-            final Environment initialEnv) throws BootstrapException, NodeValidationException, UserException {
+        final boolean foreground,
+        final Path pidFile,
+        final boolean quiet,
+        final Environment initialEnv) throws BootstrapException, NodeValidationException, UserException {
+        //此时，initialEnv包含的信息：命令行参数、elasticsearch.yml、用户自定义参数、各种文件路径（索引、日志等）
         // force the class initializer for BootstrapInfo to run before
         // the security manager is installed
         BootstrapInfo.init();
@@ -346,7 +353,7 @@ final class Bootstrap {
         //在 config 目录会生成一个 elasticsearch.keystore 文件，这个文件是用来保存一些敏感配置的
         //ES 大多数配置都是明文保存的，但是像 X-Pack 中的 security 配置需要进行加密保存，所以这些配置信息就是保存在 elasticsearch.keystore 中
         final SecureSettings keystore = loadSecureSettings(initialEnv);
-        //为啥重新又生成？大概是因为配置隔离。而且执行初始化所需部分参数，initialEnv未读入
+        //为啥重新又生成？大概是因为 “完善参数”。执行初始化所需部分参数，initialEnv未读入，如安全相关参数
         //根据保存初始化配置的 initialEnv 和 安全配置 keystore 调用 createEnvironment 重新创建Environment
         final Environment environment = createEnvironment(pidFile, keystore, initialEnv.settings(), initialEnv.configFile());
         //设置节点名称
@@ -359,15 +366,15 @@ final class Bootstrap {
         }
         if (JavaVersion.current().compareTo(JavaVersion.parse("11")) < 0) {
             final String message = String.format(
-                            Locale.ROOT,
-                            "future versions of Elasticsearch will require Java 11; " +
-                                    "your Java version from [%s] does not meet this requirement",
-                            System.getProperty("java.home"));
+                Locale.ROOT,
+                "future versions of Elasticsearch will require Java 11; " +
+                    "your Java version from [%s] does not meet this requirement",
+                System.getProperty("java.home"));
             new DeprecationLogger(LogManager.getLogger(Bootstrap.class)).deprecated(message);
         }
         if (environment.pidFile() != null) {
             try {
-                //创建一个临时文件，保存进程ID，进程退出时，自动删除该文件
+                //创建一个临时文件，保存进程ID，进程退出时，自动删除该文件，通常 “addShutdownHook” 机制删除
                 PidFile.create(environment.pidFile(), true);
             } catch (IOException e) {
                 throw new BootstrapException(e);

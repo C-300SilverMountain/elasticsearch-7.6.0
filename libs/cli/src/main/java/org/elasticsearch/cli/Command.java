@@ -41,6 +41,9 @@ public abstract class Command implements Closeable {
     private final Runnable beforeMain;
 
     /** The option parser for this command. */
+    //java 命令行解析工具
+    //链接：https://www.javacodegeeks.com/2017/07/java-command-line-interfaces-part-6-jopt-simple.html#google_vignette
+    //官网链接：http://jopt-simple.github.io/jopt-simple/examples.html
     protected final OptionParser parser = new OptionParser();
 
     private final OptionSpec<Void> helpOption = parser.acceptsAll(Arrays.asList("h", "help"), "Show help").forHelp();
@@ -67,7 +70,8 @@ public abstract class Command implements Closeable {
             //一句话概括就是： ShutdownHook允许开发人员在JVM关闭时执行相关的代码。
             //see: https://blog.csdn.net/yangshangwei/article/details/102583944
             shutdownHookThread = new Thread(() -> {
-                try {//目标：释放资源
+                try {
+                    //目标：释放资源
                     this.close();
                 } catch (final IOException e) {
                     try (

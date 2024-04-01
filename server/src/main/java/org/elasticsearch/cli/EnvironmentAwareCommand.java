@@ -62,6 +62,7 @@ public abstract class EnvironmentAwareCommand extends Command {
 
     @Override
     protected void execute(Terminal terminal, OptionSet options) throws Exception {
+        //将启动命令包含的参数保存到 settings中
         final Map<String, String> settings = new HashMap<>();
         for (final KeyValuePair kvp : settingOption.values(options)) {
             if (kvp.value.isEmpty()) {
@@ -86,6 +87,9 @@ public abstract class EnvironmentAwareCommand extends Command {
         //createEnv: 加载 elasticsearch.yml 配置文件
         //createEnv 函数最终调用了 InternalSettingsPreparer.prepareEnvironment 来加载 elasticsearch.yml 配置文件，并且创建了 command 运行的环境：Environment 对象
         //最后调用 Elasticsearch.execute 函数。创建Environment，代表各种配置参数值
+
+        //createEnv(settings) --> 将elasticsearch.yml + settings转换成Environment实例
+        // settings包含启动参数 如：elasticsearch -d -es.path.data=**
         execute(terminal, options, createEnv(settings));
     }
 
@@ -110,6 +114,7 @@ public abstract class EnvironmentAwareCommand extends Command {
 
     @SuppressForbidden(reason = "need path to construct environment")
     private static Path getConfigPath(final String pathConf) {
+        //字符串转成path对象
         return Paths.get(pathConf);
     }
 

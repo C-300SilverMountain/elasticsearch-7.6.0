@@ -63,6 +63,12 @@ class Elasticsearch extends EnvironmentAwareCommand {
         //调用 Elasticsearch 构造方法时，主要解析了一些 命令行传入的参数，如 V（版本）、d（后台运行）、p（pid文件）、q（退出）等，
         // 需要注意的是此处的 super 函数是啥都没有干的(大括号)。而在 super（EnvironmentAwareCommand构造函数）里，主要是设置 settingOption，所以命令行的 ES 参数需要以 -Ees.path.home=/es/home 这样子来设定。
         super("Starts Elasticsearch", () -> {}); // we configure logging later so we override the base class from configuring logging
+        //调用parser.acceptsAll将 “命令行的参数” 保存到 parser的属性里
+        //沿着以上的super(),可追溯到 Command类的构造函数，即可看到parser的初始化过程
+
+        //java 命令行解析工具
+        //链接：https://www.javacodegeeks.com/2017/07/java-command-line-interfaces-part-6-jopt-simple.html#google_vignette
+        //官网链接：http://jopt-simple.github.io/jopt-simple/examples.html
         versionOption = parser.acceptsAll(Arrays.asList("V", "version"),
             "Prints Elasticsearch version information and exits");
         daemonizeOption = parser.acceptsAll(Arrays.asList("d", "daemonize"),
@@ -150,7 +156,8 @@ class Elasticsearch extends EnvironmentAwareCommand {
     protected void execute(Terminal terminal, OptionSet options, Environment env) throws UserException {
         if (options.nonOptionArguments().isEmpty() == false) {
             throw new UserException(ExitCodes.USAGE, "Positional arguments not allowed, found " + options.nonOptionArguments());
-        }//输出版本信息. program arguments: 添加 --version，即会触发
+        }
+        //1、输出版本信息. program arguments: 添加 --version，即会触发
         if (options.has(versionOption)) {
             final String versionOutput = String.format(
                 Locale.ROOT,

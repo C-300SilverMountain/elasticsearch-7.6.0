@@ -1196,6 +1196,7 @@ public final class Settings implements ToXContentFragment {
          * set on this builder.
          */
         public Settings build() {
+            //提出非法配置
             processLegacyLists(map);
             return new Settings(map, secureSettings.get());
         }

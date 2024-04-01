@@ -55,8 +55,8 @@ public class InternalSettingsPreparer {
     /**
      * Prepares the settings by gathering all elasticsearch system properties, optionally loading the configuration settings.
      *
-     * @param input      the custom settings to use; these are not overwritten by settings in the configuration file
-     * @param properties map of properties key/value pairs (usually from the command-line)
+     * @param input      the custom settings to use; these are not overwritten by settings in the configuration file 【input=用户级别配置（次优先级），目前单位测试用到】
+     * @param properties map of properties key/value pairs (usually from the command-line) 【此時的properties是命令行的參數】（最高优先级）
      * @param configPath path to config directory; (use null to indicate the default)
      * @param defaultNodeName supplier for the default node.name if the setting isn't defined
      * @return the {@link Environment}
@@ -64,7 +64,9 @@ public class InternalSettingsPreparer {
     public static Environment prepareEnvironment(Settings input, Map<String, String> properties,
             Path configPath, Supplier<String> defaultNodeName) {
         // just create enough settings to build the environment, to get the config dir
+        //在 Java 中，Builder 设计模式通常用于构建复杂对象
         Settings.Builder output = Settings.builder();
+        //【此時的properties是命令行的參數】
         initializeSettings(output, input, properties);
         Environment environment = new Environment(output.build(), configPath);
 
@@ -78,6 +80,7 @@ public class InternalSettingsPreparer {
 
         output = Settings.builder(); // start with a fresh output
         Path path = environment.configFile().resolve("elasticsearch.yml");
+        //当elasticsearch.yml存在时，则加载该文件，并将该文件内容保存到output实例中
         if (Files.exists(path)) {
             try {
                 output.loadFromPath(path);
@@ -85,9 +88,11 @@ public class InternalSettingsPreparer {
                 throw new SettingsException("Failed to load settings from " + path.toString(), e);
             }
         }
-
+        //output(elasticsearch.yml) < input(用户自定义) < properties(命令行参数)
+        //配置优先级：elasticsearch.yml (最低) < 用户自定义 < 命令行参数 (最高)
         // re-initialize settings now that the config file has been loaded
         initializeSettings(output, input, properties);
+        //检查废弃的 “命令行参数”
         checkSettingsForTerminalDeprecation(output);
         finalizeSettings(output, defaultNodeName);
 
