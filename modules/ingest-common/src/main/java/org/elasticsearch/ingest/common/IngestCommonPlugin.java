@@ -60,6 +60,12 @@ public class IngestCommonPlugin extends Plugin implements ActionPlugin, IngestPl
 
     @Override
     public Map<String, Processor.Factory> getProcessors(Processor.Parameters parameters) {
+        // 管道处理器
+        // 链接：
+        // https://www.elastic.co/guide/en/elasticsearch/reference/7.6/set-processor.html
+        // https://www.cnblogs.com/fanfan-90/p/15906505.html
+        // https://www.cuiliangblog.cn/detail/section/76304999
+        // 实践：目录test/logger-usage，
         Map<String, Processor.Factory> processors = new HashMap<>();
         processors.put(DateProcessor.TYPE, new DateProcessor.Factory(parameters.scriptService));
         processors.put(SetProcessor.TYPE, new SetProcessor.Factory(parameters.scriptService));

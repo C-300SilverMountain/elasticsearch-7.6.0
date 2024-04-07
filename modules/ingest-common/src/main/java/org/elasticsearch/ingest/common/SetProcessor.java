@@ -66,6 +66,14 @@ public final class SetProcessor extends AbstractProcessor {
 
     @Override
     public IngestDocument execute(IngestDocument document) {
+        //PUT http://localhost:9200/my-index/_doc/1?pipeline=my-pipeline
+        //Content-Type: application/json
+        //
+        //{
+        //"name": "Tom",
+        //"age": 18
+        //}
+        //以上写入命令触发 以下【插入字段逻辑】
         if (overrideEnabled || document.hasField(field) == false || document.getFieldValue(field, Object.class) == null) {
             document.setFieldValue(field, value);
         }

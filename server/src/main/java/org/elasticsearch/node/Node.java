@@ -283,6 +283,7 @@ public class Node implements Closeable {
             final Environment environment, Collection<Class<? extends Plugin>> classpathPlugins, boolean forbidPrivateIndexSettings) {
         //重要：Lifecycle代表节点生命周期，一共有四个状态值
         logger = LogManager.getLogger(Node.class);
+        //当发生【异常】，需执行资源释放的【实例列表】
         final List<Closeable> resourcesToClose = new ArrayList<>(); // register everything we need to release in the case of an error
         boolean success = false;
         try {
@@ -326,12 +327,13 @@ public class Node implements Closeable {
                 logger.debug("using config [{}], data [{}], logs [{}], plugins [{}]",
                     environment.configFile(), Arrays.toString(environment.dataFiles()), environment.logsFile(), environment.pluginsFile());
             }
-            // 三种类型插件：1、位于classpath下  2、module目录下（es内置）  3、plugins目录下
+            // 三个存放插件的 【路径】：1、位于classpath下  2、module目录下（es内置）  3、plugins目录下
             // 平台插件化主要靠他，基本流程：1、读取插件配置信息  2、从jar包加载class，执行初始化
             // 创建插件服务。包含modulesDirectory（内置）和pluginsDirectory（用户自定义）
             // PluginsService 实例化的过程中主要是加载 modules 目录中的模块和加载 plugins 目录中已经安装的插件
             this.pluginsService = new PluginsService(tmpSettings, environment.configFile(), environment.modulesFile(),
                 environment.pluginsFile(), classpathPlugins);
+
             final Settings settings = pluginsService.updatedSettings();
             //插件自定义的节点角色,插件的Plugin.getRoles方法可以自定义角色
             final Set<DiscoveryNodeRole> possibleRoles = Stream.concat(
@@ -347,7 +349,8 @@ public class Node implements Closeable {
             // create the environment based on the finalized (processed) view of the settings
             // this is just to makes sure that people get the same settings, no matter where they ask them from
             this.environment = new Environment(settings, environment.configFile()); //创建节点运行需要的运行环境
-            Environment.assertEquivalent(environment, this.environment); //通过 Environment.assertEquivalent 函数来保证启动过程中配置没有被更改。
+            //通过 Environment.assertEquivalent 函数来保证启动过程中配置没有被更改。
+            Environment.assertEquivalent(environment, this.environment);
             // 插件自定义的线程池
             final List<ExecutorBuilder<?>> executorBuilders = pluginsService.getExecutorBuilders(settings);
             //ES 线程池。 ThreadPool 中定义了 4 中线程池类型
@@ -372,7 +375,7 @@ public class Node implements Closeable {
             //action 的类型定义在 ActionType
             client = new NodeClient(settings, threadPool);
             final ResourceWatcherService resourceWatcherService = new ResourceWatcherService(settings, threadPool);
-            //创建各个模块和服务
+
             //脚本插件模块，通常实现接口：ScriptPlugin
             final ScriptModule scriptModule = new ScriptModule(settings, pluginsService.filterPlugins(ScriptPlugin.class));
             //语义理解插件
@@ -401,7 +404,7 @@ public class Node implements Closeable {
             clusterService.addLocalNodeMasterListener(
                     new ConsistentSettingsService(settings, clusterService, settingsModule.getConsistentSettings())
                             .newHashPublisher());
-            //数据预处理
+            //写入数据时：数据预处理服务
             final IngestService ingestService = new IngestService(clusterService, threadPool, this.environment,
                 scriptModule.getScriptService(), analysisModule.getAnalysisRegistry(),
                 pluginsService.filterPlugins(IngestPlugin.class), client);

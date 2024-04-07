@@ -32,6 +32,13 @@ import java.util.Set;
 import static java.util.Collections.unmodifiableSet;
 import static org.elasticsearch.common.util.set.Sets.newHashSet;
 
+/**
+ * html字符过滤器
+ * 链接：
+ * https://blog.csdn.net/weixin_30439067/article/details/95932705
+ * https://juejin.cn/post/7141198973120806926
+ * https://www.hebinghua.com/studydetail/10/18.html
+ */
 public class HtmlStripCharFilterFactory extends AbstractCharFilterFactory {
     private final Set<String> escapedTags;
 

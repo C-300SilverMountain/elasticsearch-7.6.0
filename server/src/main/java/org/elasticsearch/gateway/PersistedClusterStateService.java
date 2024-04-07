@@ -263,6 +263,7 @@ public class PersistedClusterStateService {
             //indexPath案例： /data(根) /nodes/0(一个节点)/_state
             final Path indexPath = dataPath.resolve(METADATA_DIRECTORY_NAME);
             if (Files.exists(indexPath)) {
+                // 读取目录数据：/data(根) /nodes/0(一个节点)/_state
                 try (DirectoryReader reader = DirectoryReader.open(new SimpleFSDirectory(dataPath.resolve(METADATA_DIRECTORY_NAME)))) {
                     final Map<String, String> userData = reader.getIndexCommit().getUserData();
                     assert userData.get(NODE_VERSION_KEY) != null;
@@ -284,6 +285,7 @@ public class PersistedClusterStateService {
         if (nodeId == null) {
             return null;
         }
+        //节点元数据
         return new NodeMetaData(nodeId, version);
     }
 

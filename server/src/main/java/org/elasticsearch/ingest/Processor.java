@@ -42,7 +42,7 @@ public interface Processor {
 
     /**
      * Introspect and potentially modify the incoming data.
-     *
+     * 修改传入的数据
      * Expert method: only override this method if a processor implementation needs to make an asynchronous call,
      * otherwise just overwrite {@link #execute(IngestDocument)}.
      */
