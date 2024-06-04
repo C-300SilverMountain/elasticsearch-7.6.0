@@ -92,7 +92,8 @@ public abstract class Command implements Closeable {
         //启动之前执行自定义代码，这里是执行空逻辑
         beforeMain.run();
 
-        try { //调用 Command.mainWithoutErrorHandling 函数进行命令行参数解析，最终这个函数在解析完命令行参数后调用了 EnvironmentAwareCommand.execute 函数
+        try {
+            //调用 Command.mainWithoutErrorHandling 函数进行命令行参数解析，最终这个函数在解析完命令行参数后调用了 EnvironmentAwareCommand.execute 函数
             mainWithoutErrorHandling(args, terminal);
         } catch (OptionException e) {
             // print help to stderr on exceptions

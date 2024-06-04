@@ -354,8 +354,10 @@ final class Bootstrap {
         //初始化流程：起一个后台线程，证明实例存活，便于工具分析吧
         INSTANCE = new Bootstrap();
 
-        //在 config 目录会生成一个 elasticsearch.keystore 文件，这个文件是用来保存一些敏感配置的
+        //在 config 目录会生成一个 elasticsearch.keystore 文件，这个文件是用来保存一些敏感的配置，如用户密码，或者第三方平台账号密码
+        //即通过elasticsearch.keystore修改keystore加密文件即等于修改用户密码
         //ES 大多数配置都是明文保存的，但是像 X-Pack 中的 security 配置需要进行加密保存，所以这些配置信息就是保存在 elasticsearch.keystore 中
+        //https://blog.csdn.net/UbuntuTouch/article/details/113172420
         final SecureSettings keystore = loadSecureSettings(initialEnv);
         //为啥重新又生成？大概是因为 “完善参数”。执行初始化所需部分参数，initialEnv未读入，如安全相关参数
         //根据保存初始化配置的 initialEnv 和 安全配置 keystore 调用 createEnvironment 重新创建Environment

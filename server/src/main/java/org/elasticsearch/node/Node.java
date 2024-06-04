@@ -466,7 +466,6 @@ public class Node implements Closeable {
                             enginePlugins.stream().map(plugin -> plugin::getEngineFactory))
                     .collect(Collectors.toList());
 
-
             final Map<String, IndexStorePlugin.DirectoryFactory> indexStoreFactories =
                     pluginsService.filterPlugins(IndexStorePlugin.class)
                             .stream()
@@ -756,6 +755,7 @@ public class Node implements Closeable {
         clusterService.getMasterService().setClusterStatePublisher(discovery::publish);
 
         // Start the transport service now so the publish address will be added to the local disco node in ClusterService
+        //tcp port:9300，监听节点之间请求
         TransportService transportService = injector.getInstance(TransportService.class); // 负责节点间通讯。
         transportService.getTaskManager().setTaskResultsService(injector.getInstance(TaskResultsService.class));
         transportService.start();
@@ -843,6 +843,7 @@ public class Node implements Closeable {
         //提供 REST 接口服务。开启 HttpServerTransport，并且绑定监听地址，接收 REST 请求，（即用户请求）
         //实际执行以下两个类之一：Netty4HttpServerTransport 或 SecurityNetty4HttpServerTransport
         //真正处理用户请求的类：Netty4HttpRequestHandler
+        //http port:9200，监听用户请求
         injector.getInstance(HttpServerTransport.class).start();
 
         if (WRITE_PORTS_FILE_SETTING.get(settings())) {

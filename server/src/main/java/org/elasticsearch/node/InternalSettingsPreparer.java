@@ -89,7 +89,7 @@ public class InternalSettingsPreparer {
             }
         }
         //output(elasticsearch.yml) < input(用户自定义) < properties(命令行参数)
-        //配置优先级：elasticsearch.yml (最低) < 用户自定义 < 命令行参数 (最高)
+        //配置优先级：elasticsearch.yml (最低) < 用户自定义（方法参数） < 命令行参数 (最高)
         // re-initialize settings now that the config file has been loaded
         initializeSettings(output, input, properties);
         //检查废弃的 “命令行参数”
