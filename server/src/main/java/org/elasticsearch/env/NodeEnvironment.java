@@ -166,6 +166,11 @@ public final class NodeEnvironment  implements Closeable {
     /**
      * Maximum number of data nodes that should run in an environment.
      */
+    //node.max_local_storage_nodes 这个配置限制了单节点上可以开启的ES存储实例的个数，修改这个
+    //参数等于2或者更多，可以启动多个实例。
+    //https://elasticsearch.cn/question/9068
+        //https://www.elastic.co/guide/en/elasticsearch/reference/7.5/modules-node.html#max-local-storage-nodes
+        //https://www.elastic.co/guide/en/elasticsearch/reference/7.5/discovery-settings.html
     public static final Setting<Integer> MAX_LOCAL_STORAGE_NODES_SETTING = Setting.intSetting("node.max_local_storage_nodes", 1, 1,
         Property.NodeScope, Property.Deprecated);
 

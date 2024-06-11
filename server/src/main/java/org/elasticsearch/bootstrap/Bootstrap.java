@@ -122,6 +122,8 @@ final class Bootstrap {
 
         //尝试调用 mlockall，mlockall 会将进程使用的部分或者全部的地址空间锁定在物理内存中，防止其被交换到swap空间。
         // mlockall if requested
+        //防止内存被交换出去，性能调优手段之一（配置true）：https://blog.csdn.net/zhanyu1/article/details/88927194
+        //https://www.elastic.co/guide/en/elasticsearch/reference/7.6/_memory_lock_check.html
         if (mlockAll) {
             if (Constants.WINDOWS) {
                 Natives.tryVirtualLock();

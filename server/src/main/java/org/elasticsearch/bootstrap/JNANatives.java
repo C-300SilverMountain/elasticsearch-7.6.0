@@ -132,6 +132,7 @@ class JNANatives {
     }
 
     static void trySetMaxSizeVirtualMemory() {
+        //https://blog.csdn.net/sinkou/article/details/75143875
         if (Constants.LINUX || Constants.MAC_OS_X) {
             final JNACLibrary.Rlimit rlimit = new JNACLibrary.Rlimit();
             if (JNACLibrary.getrlimit(JNACLibrary.RLIMIT_AS, rlimit) == 0) {
@@ -143,6 +144,7 @@ class JNANatives {
     }
 
     static void trySetMaxFileSize() {
+        //https://blog.csdn.net/sinkou/article/details/75143875
         if (Constants.LINUX || Constants.MAC_OS_X) {
             final JNACLibrary.Rlimit rlimit = new JNACLibrary.Rlimit();
             if (JNACLibrary.getrlimit(JNACLibrary.RLIMIT_FSIZE, rlimit) == 0) {
