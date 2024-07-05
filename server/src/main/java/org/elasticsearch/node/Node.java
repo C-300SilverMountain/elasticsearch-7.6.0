@@ -399,6 +399,8 @@ public class Node implements Closeable {
             scriptModule.registerClusterSettingsListeners(settingsModule.getClusterSettings());
             resourcesToClose.add(resourceWatcherService);
             // 从插件中加载网络服务
+            //网络模块 NetworkModule 加载处理集群网络相关的逻辑的实现类的入口。
+            //该模块针对 TCP、HTTP 协议进行了封装，封装了 TCP 用于集群保持长连接通信，封装了  HTTP 用于处理各种外部 Rest 请求。
             final NetworkService networkService = new NetworkService(
                 getCustomNameResolvers(pluginsService.filterPlugins(DiscoveryPlugin.class)));
 
@@ -534,7 +536,25 @@ public class Node implements Closeable {
 
             //请求总分发器：处理请求的类名以Action结尾：如 *Action，这些类都会注册到RestController，key为路径，value为*Action；
             final RestController restController = actionModule.getRestController();
-            //网络模块：该对象全局唯一
+            //NetworkModule网络模块：该对象全局唯一
+            //NetworkPlugin：
+            //网络插件，网络模块初始化时加载这些插件，这些插件提供网络服务。
+            //默认配置下有四种网络插件 XPackPlugin、Netty4Plugin、Security、VotingOnlyNodePlugin。其中 Netty4Plugin，Security 插件是我们关注的封装了  TCP 和 HTTP 服务实现类。
+            //这些服务实现类会被添加到 NetworkModule 的三个集合中。
+            //(1)添加 HttpServerTransport 到集合 transportHttpFactories 中
+            //(2)添加 Transport 到集合 transportFactories 中
+            //(3)添加 TransportInterceptor 到集合 transportInterceptors 中
+
+            //Netty4Plugin：
+            //网络插件之一，继承自 NetworkPlugin() 接口，其中主要是下列两个接口用于构造网络实现类：
+            //(1)getTransports()：//返回Map<String, Supplier<Transport>>，然后添加到 transportFactories 集合中。接口返回 Netty4Transport ，以加载 TCP 服务到容器中。key=netty4。
+            //(2)getHttpTransports(); //Map<String, Supplier<HttpServerTransport>>，然后添加到 transportHttpFactories 集合中。接口返回 Netty4HttpServerTransport，以记载 HTTP 服务到容器中。key=netty4。
+
+            //Security：
+            //网络插件之一，继承自 NetworkPlugin() 接口，其中主要是下列两个接口用于构造网络实现类：
+            //(1)getTransports()：//返回Map<String, Supplier<Transport>>，然后添加到 transportFactories 集合中。接口返回 SecurityNetty4ServerTransport、SecurityNioTransport 加载 TCP 服务到容器中。key=security4、security-nio。
+            //(2)getHttpTransports(); //Map<String, Supplier<HttpServerTransport>>，然后添加到 transportHttpFactories 集合中。接口返回 SecurityNetty4HttpServerTransport、SecurityNioHttpServerTransport，以记载 HTTP 服务到容器中。key=security4、security-nio。
+
             final NetworkModule networkModule = new NetworkModule(settings, false, pluginsService.filterPlugins(NetworkPlugin.class),
                 threadPool, bigArrays, pageCacheRecycler, circuitBreakerService, namedWriteableRegistry, xContentRegistry,
                 networkService, restController);
@@ -549,6 +569,7 @@ public class Node implements Closeable {
                 indicesModule.getMapperRegistry(), settingsModule.getIndexScopedSettings());
             new TemplateUpgradeService(client, clusterService, threadPool, indexTemplateMetaDataUpgraders);
             //集群中节点之间的 传输对象
+            //同时调用下列方法，从集合中获取 TCP的处理类：
             final Transport transport = networkModule.getTransportSupplier().get();
             Set<String> taskHeaders = Stream.concat(
                 pluginsService.filterPlugins(ActionPlugin.class).stream().flatMap(p -> p.getTaskHeaders().stream()),
@@ -569,6 +590,7 @@ public class Node implements Closeable {
                 SearchExecutionStatsCollector.makeWrapper(responseCollectorService));
             //初始化服务端，监听端口，接收此端口的请求
             //es通信部分详解：https://blog.csdn.net/qq_34448345/article/details/128944565
+            //同时调用下列方法，从集合中获取 HTTP的处理类：
             final HttpServerTransport httpServerTransport = newHttpTransport(networkModule);
 
 

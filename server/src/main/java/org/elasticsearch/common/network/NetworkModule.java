@@ -99,8 +99,11 @@ public final class NetworkModule {
             new NamedWriteableRegistry.Entry(Task.Status.class, ResyncTask.Status.NAME, ResyncTask.Status::new));
     }
 
+    //保存 Transport 模块，调用 NetworkModule.registerTransport()。Transport 负责集群节点之间的 rpc 请求。
     private final Map<String, Supplier<Transport>> transportFactories = new HashMap<>();
+    //保存 Http 模块，调用 NetworkModule.registerHttpTransport()。HttpServerTransport 负责集群接收用户http请求。
     private final Map<String, Supplier<HttpServerTransport>> transportHttpFactories = new HashMap<>();
+    //保存拦截器，调用 NetworkModule.registerTransportInterceptor()。
     private final List<TransportInterceptor> transportIntercetors = new ArrayList<>();
 
     /**
@@ -119,7 +122,7 @@ public final class NetworkModule {
         this.transportClient = transportClient;
         for (NetworkPlugin plugin : plugins) {
             //这里会调用 Security.getHttpTransports 创建全局唯一的SecurityNetty4HttpServerTransport
-            //负责处理集群接受外部 用户rest请求 实现类
+            //负责处理集群接收外部 用户rest请求 实现类
             Map<String, Supplier<HttpServerTransport>> httpTransportFactory = plugin.getHttpTransports(settings, threadPool, bigArrays,
                 pageCacheRecycler, circuitBreakerService, xContentRegistry, networkService, dispatcher);
             if (transportClient == false) {
@@ -127,7 +130,7 @@ public final class NetworkModule {
                     registerHttpTransport(entry.getKey(), entry.getValue());
                 }
             }
-            //负责处理集群中节点之间 rpc请求 实现类
+            //负责处理集群中节点之间 rpc请求 实现类：包括发送与接收
             Map<String, Supplier<Transport>> transportFactory = plugin.getTransports(settings, threadPool, pageCacheRecycler,
                 circuitBreakerService, namedWriteableRegistry, networkService);
             for (Map.Entry<String, Supplier<Transport>> entry : transportFactory.entrySet()) {
