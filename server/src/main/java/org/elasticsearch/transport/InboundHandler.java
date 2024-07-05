@@ -108,7 +108,7 @@ public class InboundHandler {
 
     private void messageReceived(BytesReference reference, TcpChannel channel) throws IOException {
         InetSocketAddress remoteAddress = channel.getRemoteAddress();
-
+        //负责接收集群中其他节点的响应报文，并根据报文中的requestid触发对应的处理器
         ThreadContext threadContext = threadPool.getThreadContext();
         try (ThreadContext.StoredContext existing = threadContext.stashContext();
              InboundMessage message = reader.deserialize(reference)) {
@@ -120,6 +120,7 @@ public class InboundHandler {
             } else {
                 final TransportResponseHandler<?> handler;
                 // 根据requestId找到对应的handler比较处理，这里的requestId，相当与session，当前节点唯一
+                //接收到集群中其他节点的响应，根据响应内容中的requestid，找到对应的处理器，然后执行它
                 long requestId = message.getRequestId();
                 if (message.isHandshake()) {
                     handler = handshaker.removeHandlerForHandshake(requestId);

@@ -953,6 +953,7 @@ public class Security extends Plugin implements ActionPlugin, IngestPlugin, Netw
 
         IPFilter ipFilter = this.ipFilter.get();
         Map<String, Supplier<Transport>> transports = new HashMap<>();
+        //处理集群中节点之间的rpc请求 实现类，注：此类是服务端  （clinet-->server）
         transports.put(SecurityField.NAME4, () -> new SecurityNetty4ServerTransport(settings, Version.CURRENT, threadPool,
             networkService, pageCacheRecycler, namedWriteableRegistry, circuitBreakerService, ipFilter, getSslService()));
         transports.put(SecurityField.NIO, () -> new SecurityNioTransport(settings, Version.CURRENT, threadPool, networkService,
@@ -973,6 +974,7 @@ public class Security extends Plugin implements ActionPlugin, IngestPlugin, Netw
         }
 
         Map<String, Supplier<HttpServerTransport>> httpTransports = new HashMap<>();
+        //处理集群接受外部 用户rest请求 实现类，注：此类是服务端  （clinet-->server）
         httpTransports.put(SecurityField.NAME4, () -> new SecurityNetty4HttpServerTransport(settings, networkService, bigArrays,
             ipFilter.get(), getSslService(), threadPool, xContentRegistry, dispatcher));
         httpTransports.put(SecurityField.NIO, () -> new SecurityNioHttpServerTransport(settings, networkService, bigArrays,

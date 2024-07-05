@@ -37,6 +37,7 @@ class Netty4HttpRequestHandler extends SimpleChannelInboundHandler<HttpPipelined
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, HttpPipelinedRequest<FullHttpRequest> msg) {
+        //负责读取集群接收外部的用户rest请求的内容，并交由RestController分发到对应的处理器
         Netty4HttpChannel channel = ctx.channel().attr(Netty4HttpServerTransport.HTTP_CHANNEL_KEY).get();
         FullHttpRequest request = msg.getRequest();
         boolean success = false;

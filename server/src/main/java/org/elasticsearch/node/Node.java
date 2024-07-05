@@ -534,7 +534,7 @@ public class Node implements Closeable {
 
             //请求总分发器：处理请求的类名以Action结尾：如 *Action，这些类都会注册到RestController，key为路径，value为*Action；
             final RestController restController = actionModule.getRestController();
-            //网络模块
+            //网络模块：该对象全局唯一
             final NetworkModule networkModule = new NetworkModule(settings, false, pluginsService.filterPlugins(NetworkPlugin.class),
                 threadPool, bigArrays, pageCacheRecycler, circuitBreakerService, namedWriteableRegistry, xContentRegistry,
                 networkService, restController);
@@ -548,14 +548,14 @@ public class Node implements Closeable {
             final MetaDataIndexUpgradeService metaDataIndexUpgradeService = new MetaDataIndexUpgradeService(settings, xContentRegistry,
                 indicesModule.getMapperRegistry(), settingsModule.getIndexScopedSettings());
             new TemplateUpgradeService(client, clusterService, threadPool, indexTemplateMetaDataUpgraders);
-            //底层传输对象
+            //集群中节点之间的 传输对象
             final Transport transport = networkModule.getTransportSupplier().get();
             Set<String> taskHeaders = Stream.concat(
                 pluginsService.filterPlugins(ActionPlugin.class).stream().flatMap(p -> p.getTaskHeaders().stream()),
                 Stream.of(Task.X_OPAQUE_ID)
             ).collect(Collectors.toSet());
             //传输服务：初始化请求客户端，类似httpclient，用于召回
-            //节点与节点之间通讯工具
+            //节点与节点之间通讯工具，注：该类即是客户端也是服务端
             final TransportService transportService = newTransportService(settings, transport, threadPool,
                 networkModule.getTransportInterceptor(), localNodeFactory, settingsModule.getClusterSettings(), taskHeaders);
             // 网关元数据状态
@@ -568,6 +568,7 @@ public class Node implements Closeable {
             final SearchTransportService searchTransportService =  new SearchTransportService(transportService,
                 SearchExecutionStatsCollector.makeWrapper(responseCollectorService));
             //初始化服务端，监听端口，接收此端口的请求
+            //es通信部分详解：https://blog.csdn.net/qq_34448345/article/details/128944565
             final HttpServerTransport httpServerTransport = newHttpTransport(networkModule);
 
 
