@@ -201,6 +201,7 @@ public class RestController implements HttpServerTransport.Dispatcher {
     }
 
     private void dispatchRequest(RestRequest request, RestChannel channel, RestHandler handler) throws Exception {
+        //handler其实就是**Action，个别Action会重写canTripCircuitBreaker，来配置是否触发断路器
         final int contentLength = request.content().length();
         if (contentLength > 0) {
             final XContentType xContentType = request.getXContentType();
@@ -216,7 +217,8 @@ public class RestController implements HttpServerTransport.Dispatcher {
         }
         RestChannel responseChannel = channel;
         try {
-            if (handler.canTripCircuitBreaker()) {//请求级别断路器：检查当前内存使用情况，如大于阈值，则直接返回空值，降低OOM风险
+            //请求级别断路器：检查当前内存使用情况，如大于阈值，则直接返回空值，降低OOM风险
+            if (handler.canTripCircuitBreaker()) {
                 inFlightRequestsBreaker(circuitBreakerService).addEstimateBytesAndMaybeBreak(contentLength, "<http_request>");
             } else {
                 inFlightRequestsBreaker(circuitBreakerService).addWithoutBreaking(contentLength);
@@ -298,6 +300,7 @@ public class RestController implements HttpServerTransport.Dispatcher {
             //通过前缀树获取uri对应的Rest*Action，即RestHandler
             Iterator<MethodHandlers> allHandlers = getAllHandlers(request.params(), rawPath);
             while (allHandlers.hasNext()) {
+                //handler = **Action
                 final RestHandler handler;
                 final MethodHandlers handlers = allHandlers.next();
                 if (handlers == null) {

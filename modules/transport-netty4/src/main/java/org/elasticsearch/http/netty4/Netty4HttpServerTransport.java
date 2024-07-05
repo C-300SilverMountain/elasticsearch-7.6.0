@@ -199,7 +199,8 @@ public class Netty4HttpServerTransport extends AbstractHttpServerTransport {
             //重点：这里会调用分发请求类
             //真正处理用户请求的多个处理器，以责任链模块进行管理及调用. 【用来给接收到的通道添加 处理器】
             serverBootstrap.childHandler(configureServerChannelHandler());
-            serverBootstrap.handler(new ServerChannelExceptionHandler(this));//【用来给 ServerChannel 添加处理器】
+            //【用来给 ServerChannel 添加处理器】  // 该 handler方法对应 bossGroup , childHandler 对应 workerGroup
+            serverBootstrap.handler(new ServerChannelExceptionHandler(this));
             //用来给接收到的通道添加配置】
             serverBootstrap.childOption(ChannelOption.TCP_NODELAY, SETTING_HTTP_TCP_NO_DELAY.get(settings));
             serverBootstrap.childOption(ChannelOption.SO_KEEPALIVE, SETTING_HTTP_TCP_KEEP_ALIVE.get(settings));

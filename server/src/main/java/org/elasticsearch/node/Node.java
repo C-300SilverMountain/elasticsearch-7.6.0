@@ -555,6 +555,7 @@ public class Node implements Closeable {
                 Stream.of(Task.X_OPAQUE_ID)
             ).collect(Collectors.toSet());
             //传输服务：初始化请求客户端，类似httpclient，用于召回
+            //节点与节点之间通讯工具
             final TransportService transportService = newTransportService(settings, transport, threadPool,
                 networkModule.getTransportInterceptor(), localNodeFactory, settingsModule.getClusterSettings(), taskHeaders);
             // 网关元数据状态

@@ -39,6 +39,8 @@ public class HttpPipeliningAggregator<Response extends HttpPipelinedMessage, Lis
 
     public HttpPipeliningAggregator(int maxEventsHeld) {
         this.maxEventsHeld = maxEventsHeld;
+        //优先队列的作用是能保证每次取出的元素都是队列中权值最小的
+        //https://juejin.cn/post/7136936945321508878
         this.outboundHoldingQueue = new PriorityQueue<>(1, Comparator.comparing(Tuple::v1));
     }
 
@@ -55,13 +57,18 @@ public class HttpPipeliningAggregator<Response extends HttpPipelinedMessage, Lis
                  * Since the response with the lowest sequence number is the top of the priority queue, we know if its sequence
                  * number does not match the current write sequence number then we have not processed all preceding responses yet.
                  */
+                //https://juejin.cn/post/7136936945321508878
+                // peek():查看下个元素的内容，如果没有返回null   (仅查看，不会弹出 元素)
+                // poll():获取下个元素，如果没有返回null        (返回且会弹出 元素)
                 final Tuple<Response, Listener> top = outboundHoldingQueue.peek();
 
                 if (top.v1().getSequence() != writeSequence) {
                     break;
                 }
+
                 outboundHoldingQueue.poll();
                 readyResponses.add(top);
+                //确保处理的序号从小到大
                 writeSequence++;
             }
 

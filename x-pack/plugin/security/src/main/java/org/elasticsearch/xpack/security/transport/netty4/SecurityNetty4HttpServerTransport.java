@@ -87,6 +87,9 @@ public class SecurityNetty4HttpServerTransport extends Netty4HttpServerTransport
             if (sslConfiguration != null) {
                 SSLEngine sslEngine = sslService.createSSLEngine(sslConfiguration, null, -1);
                 sslEngine.setUseClientMode(false);
+                //使用 SSL/TLS 加密 Netty 程序
+                //https://waylau.com/essential-netty-in-action/CORE%20FUNCTIONS/Securing%20Netty%20applications%20with%20SSLTLS.html
+                //https://blog.csdn.net/Josh_scott/article/details/133890164
                 ch.pipeline().addFirst("ssl", new SslHandler(sslEngine));
             }
             ch.pipeline().addFirst("ip_filter", new IpFilterRemoteAddressFilter(ipFilter, IPFilter.HTTP_PROFILE_NAME));

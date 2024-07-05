@@ -84,6 +84,7 @@ public interface CircuitBreaker {
     }
 
     enum Durability {
+        //使断路器跳闸的情况最终会自行修复
         // The condition that tripped the circuit breaker fixes itself eventually.
         TRANSIENT,
         // The condition that tripped the circuit breaker requires manual intervention.

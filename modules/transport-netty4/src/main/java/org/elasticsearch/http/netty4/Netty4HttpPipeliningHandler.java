@@ -33,6 +33,7 @@ import java.util.List;
 
 /**
  * Implements HTTP pipelining ordering, ensuring that responses are completely served in the same order as their corresponding requests.
+ * 实现http管道排序，确保响应顺序与对应请求顺序一致
  */
 public class Netty4HttpPipeliningHandler extends ChannelDuplexHandler {
 
