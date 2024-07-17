@@ -947,6 +947,8 @@ public class Security extends Plugin implements ActionPlugin, IngestPlugin, Netw
     public Map<String, Supplier<Transport>> getTransports(Settings settings, ThreadPool threadPool, PageCacheRecycler pageCacheRecycler,
                                                           CircuitBreakerService circuitBreakerService,
                                                           NamedWriteableRegistry namedWriteableRegistry, NetworkService networkService) {
+         //Transport 负责集群节点之间的 rpc 请求。
+        //即是服务端又是客户端，能接收响应结果&发送请求
         if (transportClientMode || enabled == false) { // don't register anything if we are not enabled, or in transport client mode
             return Collections.emptyMap();
         }
@@ -969,6 +971,8 @@ public class Security extends Plugin implements ActionPlugin, IngestPlugin, Netw
                                                                         NamedXContentRegistry xContentRegistry,
                                                                         NetworkService networkService,
                                                                         HttpServerTransport.Dispatcher dispatcher) {
+         //HttpServerTransport 负责集群接收用户http请求。
+        //充当服务端，专门接收用户的http请求
         if (enabled == false) { // don't register anything if we are not enabled
             return Collections.emptyMap();
         }

@@ -62,9 +62,10 @@ import java.util.function.Supplier;
  * A module to handle registering and binding all network related classes.
  */
 public final class NetworkModule {
-
+    //自定义传输类型
     public static final String TRANSPORT_TYPE_KEY = "transport.type";
     public static final String HTTP_TYPE_KEY = "http.type";
+    //默认传输类型，优先使用自定义
     public static final String HTTP_TYPE_DEFAULT_KEY = "http.type.default";
     public static final String TRANSPORT_TYPE_DEFAULT_KEY = "transport.type.default";
 

@@ -333,7 +333,7 @@ public class Node implements Closeable {
             // PluginsService 实例化的过程中主要是加载 modules 目录中的模块和加载 plugins 目录中已经安装的插件
             this.pluginsService = new PluginsService(tmpSettings, environment.configFile(), environment.modulesFile(),
                 environment.pluginsFile(), classpathPlugins);
-
+            //加载所有插件配置，并执行初始化，不管是否同种类型插件都会初始化，即不区分优先级，到了使用阶段才区分优先级，如networkModule.getTransportSupplier()
             final Settings settings = pluginsService.updatedSettings();
             //插件自定义的节点角色,插件的Plugin.getRoles方法可以自定义角色
             final Set<DiscoveryNodeRole> possibleRoles = Stream.concat(
@@ -398,9 +398,7 @@ public class Node implements Closeable {
             // 添加集群配置监听器
             scriptModule.registerClusterSettingsListeners(settingsModule.getClusterSettings());
             resourcesToClose.add(resourceWatcherService);
-            // 从插件中加载网络服务
-            //网络模块 NetworkModule 加载处理集群网络相关的逻辑的实现类的入口。
-            //该模块针对 TCP、HTTP 协议进行了封装，封装了 TCP 用于集群保持长连接通信，封装了  HTTP 用于处理各种外部 Rest 请求。
+            //网路服务：对服务发现插件的封装
             final NetworkService networkService = new NetworkService(
                 getCustomNameResolvers(pluginsService.filterPlugins(DiscoveryPlugin.class)));
 
@@ -536,6 +534,10 @@ public class Node implements Closeable {
 
             //请求总分发器：处理请求的类名以Action结尾：如 *Action，这些类都会注册到RestController，key为路径，value为*Action；
             final RestController restController = actionModule.getRestController();
+            // 从插件中加载网络服务
+            //网络模块 NetworkModule 加载处理集群网络相关的逻辑的实现类的入口。
+            //该模块针对 TCP、HTTP 协议进行了封装，封装了 TCP 用于集群保持长连接通信，封装了  HTTP 用于处理各种外部 Rest 请求。
+
             //NetworkModule网络模块：该对象全局唯一
             //NetworkPlugin：
             //网络插件，网络模块初始化时加载这些插件，这些插件提供网络服务。
@@ -1183,6 +1185,8 @@ public class Node implements Closeable {
      * @param discoveryPlugins Discovery plugins list
      */
     private List<NetworkService.CustomNameResolver> getCustomNameResolvers(List<DiscoveryPlugin> discoveryPlugins) {
+        //自定义名称解析器,可以支持自定义查找键
+        //对比域名解析器，根据字符串得到ip+port,
         List<NetworkService.CustomNameResolver> customNameResolvers = new ArrayList<>();
         for (DiscoveryPlugin discoveryPlugin : discoveryPlugins) {
             NetworkService.CustomNameResolver customNameResolver = discoveryPlugin.getCustomNameResolver(settings());

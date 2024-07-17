@@ -32,6 +32,10 @@ public class GroupChatServer {
             selector = Selector.open();
             //ServerSocketChannel
             listenChannel = ServerSocketChannel.open();
+            //一个端口只能被一个线程监听
+//            ServerSocketChannel listenChannel1 = ServerSocketChannel.open();
+//            listenChannel1.socket().bind(new InetSocketAddress(PORT));
+
             //绑定端口
             listenChannel.socket().bind(new InetSocketAddress(PORT));
             //设置非阻塞模式

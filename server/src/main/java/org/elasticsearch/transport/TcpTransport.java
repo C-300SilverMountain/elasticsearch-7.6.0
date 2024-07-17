@@ -124,6 +124,8 @@ public abstract class TcpTransport extends AbstractLifecycleComponent implements
     private final TransportHandshaker handshaker;
     private final TransportKeepAlive keepAlive;
     private final OutboundHandler outboundHandler;
+    //InboundHandler：
+    //这个是节点接收到其他节点TCP数据的处理入口，判断是请求还是响应。如果是响应则调用 handleResponse() 处理。如果是请求则调用 handleRequest() 处理。
     private final InboundHandler inboundHandler;
 
     public TcpTransport(Settings settings, Version version, ThreadPool threadPool, PageCacheRecycler pageCacheRecycler,
