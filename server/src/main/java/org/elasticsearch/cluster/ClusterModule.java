@@ -111,7 +111,11 @@ public class ClusterModule extends AbstractModule {
         this.shardsAllocator = createShardsAllocator(settings, clusterService.getClusterSettings(), clusterPlugins);
         this.clusterService = clusterService;
         this.indexNameExpressionResolver = new IndexNameExpressionResolver();
+        //allocation
+        //封装了分片分配相关的功能和策略，包括主分片的分配和副分片的
+        //分配，本模块由主节点调用。创建新索引、集群完全重启都需要分片分配的过程。
         this.allocationService = new AllocationService(allocationDeciders, shardsAllocator, clusterInfoService);
+
     }
 
     public static List<Entry> getNamedWriteables() {

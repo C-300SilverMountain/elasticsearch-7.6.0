@@ -431,9 +431,16 @@ public class Node implements Closeable {
             //系统监控服务，如监控jvm、操作系统资源等使用情况
             final MonitorService monitorService = new MonitorService(settings, nodeEnvironment, threadPool, clusterInfoService);
             //集群模块
+            //Cluster模块是主节点执行集群管理的封装实现，管理集群状态，维护集群层面的配置信息。主要功能如下：
+            //1 管理集群状态，将新生成的集群状态发布到集群所有节点。
+            //2 调用allocation模块执行分片分配，决策哪些分片应该分配到哪个节点
+            //3 在集群各节点中直接迁移分片，保持数据平衡。
             ClusterModule clusterModule = new ClusterModule(settings, clusterService, clusterPlugins, clusterInfoService);
             modules.add(clusterModule);
             //索引模块
+            //Indices
+            //索引模块管理全局级的索引设置，不包括索引级的（索引设置分为全局级和每个索引级）。它还封装了索引数据恢复功能。集群启动阶段
+            //需要的主分片恢复和副分片恢复就是在这个模块实现的。
             IndicesModule indicesModule = new IndicesModule(pluginsService.filterPlugins(MapperPlugin.class));
             modules.add(indicesModule);
             //搜索模块
@@ -442,6 +449,8 @@ public class Node implements Closeable {
             CircuitBreakerService circuitBreakerService = createCircuitBreakerService(settingsModule.getSettings(),
                 settingsModule.getClusterSettings());
             resourcesToClose.add(circuitBreakerService);
+            //gateway
+            //负责对收到Master广播下来的集群状态（cluster state）数据的持久化存储，并在集群完全重启时恢复它们。
             modules.add(new GatewayModule());
 
             // 缓存收集器
@@ -478,6 +487,9 @@ public class Node implements Closeable {
                 = new PersistedClusterStateService(nodeEnvironment, xContentRegistry, bigArrays, clusterService.getClusterSettings(),
                 threadPool::relativeTimeInMillis);
 
+            //Engine
+            //Engine模块封装了对Lucene的操作及translog的调用，它是对一个分
+            //片读写操作的最终提供者。
             // collect engine factory providers from server and from plugins
             final Collection<EnginePlugin> enginePlugins = pluginsService.filterPlugins(EnginePlugin.class);
 
@@ -487,7 +499,6 @@ public class Node implements Closeable {
                             indicesModule.getEngineFactories().stream(),
                             enginePlugins.stream().map(plugin -> plugin::getEngineFactory))
                     .collect(Collectors.toList());
-
 
             // 从插件中过滤出索引存储工厂
             final Map<String, IndexStorePlugin.DirectoryFactory> indexStoreFactories =
@@ -572,6 +583,12 @@ public class Node implements Closeable {
             new TemplateUpgradeService(client, clusterService, threadPool, indexTemplateMetaDataUpgraders);
             //集群中节点之间的 传输对象
             //同时调用下列方法，从集合中获取 TCP的处理类：
+            //Transport
+            //传输模块用于集群内节点之间的内部通信。从一个节点到另一个节
+            //点的每个请求都使用传输模块。
+            //如同HTTP模块，传输模块本质上也是完全异步的。
+            //传输模块使用 TCP 通信，每个节点都与其他节点维持若干 TCP 长
+            //连接。内部节点间的所有通信都是本模块承载的。
             final Transport transport = networkModule.getTransportSupplier().get();
             Set<String> taskHeaders = Stream.concat(
                 pluginsService.filterPlugins(ActionPlugin.class).stream().flatMap(p -> p.getTaskHeaders().stream()),
@@ -579,6 +596,7 @@ public class Node implements Closeable {
             ).collect(Collectors.toSet());
             //传输服务：初始化请求客户端，类似httpclient，用于召回
             //节点与节点之间通讯工具，注：该类即是客户端也是服务端
+
             final TransportService transportService = newTransportService(settings, transport, threadPool,
                 networkModule.getTransportInterceptor(), localNodeFactory, settingsModule.getClusterSettings(), taskHeaders);
             // 网关元数据状态
@@ -593,6 +611,12 @@ public class Node implements Closeable {
             //初始化服务端，监听端口，接收此端口的请求
             //es通信部分详解：https://blog.csdn.net/qq_34448345/article/details/128944565
             //同时调用下列方法，从集合中获取 HTTP的处理类：
+            //HTTP
+            //HTTP模块允许通过JSON over HTTP的方式访问ES的API,HTTP模块
+            //本质上是完全异步的，这意味着没有阻塞线程等待响应。使用异步通信
+            //进行 HTTP 的好处是解决了 C10k 问题（10k量级的并发连接）。
+            //在部分场景下，可考虑使用HTTP keepalive以提升性能。注意：不
+            //要在客户端使用HTTP chunking。
             final HttpServerTransport httpServerTransport = newHttpTransport(networkModule);
 
 
@@ -631,6 +655,10 @@ public class Node implements Closeable {
             //GceDiscoveryPlugin：谷歌提供的发现插件
             //链接：https://www.jianshu.com/p/d3ad414ed4f7
             // 服务发现模块
+            //Discovery
+            //发现模块负责发现集群中的节点，以及选举主节点。当节点加入或
+            //退出集群时，主节点会采取相应的行动。从某种角度来说，发现模块起
+            //到类似ZooKeeper的作用，选主并管理集群拓扑。
             final DiscoveryModule discoveryModule = new DiscoveryModule(settings, threadPool, transportService, namedWriteableRegistry,
                 networkService, clusterService.getMasterService(), clusterService.getClusterApplierService(),
                 clusterService.getClusterSettings(), pluginsService.filterPlugins(DiscoveryPlugin.class),
@@ -667,6 +695,11 @@ public class Node implements Closeable {
 
             // 这里是elasticsearch 自己的IOC管理机制
             // 使用lambda创建了一个Module对象，并执行configure(Binder binder)方法，在方法里面执行inject逻辑
+
+            //ES使用Guice框架进行模块化管理。Guice是Google开发的轻量级依
+            //赖注入框架（IoC）。
+            //软件设计中经常说要依赖于抽象而不是具象，IoC 就是这种理念的
+            //实现方式，并且在内部实现了对象的创建和管理。
             modules.add(b -> {
                     b.bind(Node.class).toInstance(this);
                     b.bind(NodeService.class).toInstance(nodeService);
