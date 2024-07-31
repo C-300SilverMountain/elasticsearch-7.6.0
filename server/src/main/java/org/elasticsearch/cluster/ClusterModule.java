@@ -114,6 +114,8 @@ public class ClusterModule extends AbstractModule {
         //allocation
         //封装了分片分配相关的功能和策略，包括主分片的分配和副分片的
         //分配，本模块由主节点调用。创建新索引、集群完全重启都需要分片分配的过程。
+
+        //选举shard级元信息，构建内容路由表，是在allocation模块完成的
         this.allocationService = new AllocationService(allocationDeciders, shardsAllocator, clusterInfoService);
 
     }

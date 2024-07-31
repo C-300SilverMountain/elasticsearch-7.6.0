@@ -737,6 +737,24 @@ public class Node implements Closeable {
                     b.bind(GatewayMetaState.class).toInstance(gatewayMetaState);
                     b.bind(Discovery.class).toInstance(discoveryModule.getDiscovery());
                     {
+                        //分片恢复服务：
+                        //1、主分片恢复
+                        //   由于每次写操作都会记录事务日志（translog），事务日志中记录了具体的操作命令，以及相应的数据。
+                        //   因此：将最后一次提交（Lucene的一次提交就是一次fsync刷盘的过程）（其实就是最后提交一次的时间点 之后的translog）之后的translog进行重放，建立lucene索引，如此即可完成主分片的恢复。
+                        //2、副本恢复 (分两个阶段)
+                        //阶段一：在主分片的节点执行：获取translog保留锁，保证translog不会被清空（commit会清空translog）。通过Lucene接口对主分片做快照，然后将快照copy给副本所在节点。
+                        //阶段二：在主分片的节点执行，对translog做快照；这个快照里包含从阶段一开始，直到执行translog快照期间所有新增的索引。将translog快copy给副本，进行重放。
+
+                        //阶段一缺点：阶段一对translog加锁，不允许refresh操作，可能会导致产生过大translog。
+                               //优化手段：对translog做快照，原translog可以被清空，因为快照仍然有清空之前的数据，到时copy translog快照到副本即可。
+                        //阶段一缺点：通过lucene接口对主分片做快照，实际上目的是：copy主分片全量数据给副本，太耗时。
+                               //优化手段：标识每一个操作。即给每一个操作序号SequenceNumber。思路：给每一次写操作，都分配一个序号，通过对比序号就可以计算出差异范围
+                               //es具体实现方式：添加global checkpoint和local checkpoint，主分片维护global checkpoint，代表所有分片都已写入了此序号的位置，
+                               //副本维护local checkpoint，代表当前分片已写入此序号位置。
+                               //恢复时：通过对比两个序列号，计算出缺失的数据范围，然后通过translog重放这部分数据，同时translog会为此保留更长的时间。
+                           //因此，有两个机会可以跳过副本恢复的阶段一
+                           //一：基于SequenceNumber，从主分片节点的translog恢复数据。跳过阶段一
+                           //二：主副两分片有相同的syncid且doc数相同。跳过阶段一
                         RecoverySettings recoverySettings = new RecoverySettings(settings, settingsModule.getClusterSettings());
                         processRecoverySettings(settingsModule.getClusterSettings(), recoverySettings);
                         b.bind(PeerRecoverySourceService.class).toInstance(new PeerRecoverySourceService(transportService,
@@ -837,6 +855,13 @@ public class Node implements Closeable {
 
     /**
      * Start the node. If the node is already started, this method is no-op.
+     * 集群重启重要步骤：
+     * 1、选主节点
+     * 2、选主分片
+     * 3、选副本
+     * 4、分片数据恢复：主分片恢复、副本恢复
+     *    主分片为何需要恢复？只有一个原因：数据未来得及刷盘
+     *    副本为何需要恢复？一是因为数据未来得及刷盘；二是因为数据只写到主分片，未写到副本。
      */
     public Node start() throws NodeValidationException {
         if (!lifecycle.moveToStarted()) {
@@ -879,7 +904,8 @@ public class Node implements Closeable {
         assert localNodeFactory.getNode() != null;
         assert transportService.getLocalNode().equals(localNodeFactory.getNode())
             : "transportService has a different local node than the factory provided";
-        injector.getInstance(PeerRecoverySourceService.class).start();//负责处理对等分片的恢复请求，并且开启从这个源分片到目标分片的恢复流程。
+        //负责处理对等分片的恢复请求，并且开启从这个源分片到目标分片的恢复流程。
+        injector.getInstance(PeerRecoverySourceService.class).start();
 
         // Load (and maybe upgrade) the metadata stored on disk
         final GatewayMetaState gatewayMetaState = injector.getInstance(GatewayMetaState.class);
