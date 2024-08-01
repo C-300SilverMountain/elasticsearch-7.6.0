@@ -484,6 +484,7 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
 
             );
         } else {
+            //在ES中，发送投票就是发送加入集群（JoinRequest）请求。得票就是申请加入该节点的请求的数量。
             // process any incoming joins (they will fail because we are not the master)
             nodeJoinController.stopElectionContext(masterNode + " elected");
 
@@ -491,6 +492,9 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
             // 若在有限次数内都没有成功（选举的节点没有收到超过半数的master选票，或其他原因），则返回false，此时，重新开启一个线程去参与下一轮选举。
             // send join request
             final boolean success = joinElectedMaster(masterNode);
+            //执行joinElectedMaster后，对方是如何处理请求的？
+            //在joinElectedMaster中，可看到发送的目标地址为:DISCOVERY_JOIN_ACTION_NAME，该地址关联了一个Action，该Action便是处理joinrequest请求的
+            //具体处理joinRequest请求逻辑在：JoinRequestRequestHandler 》》》handleJoinRequest
 
             synchronized (stateMutex) {
                 if (success) {
@@ -829,6 +833,10 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
 
     //（3）如果activeMasters为空，则从masterCandidates中选举，结果可能选举成功，也可能选举失败。如果不为空，则从activeMasters中选择
     //最合适的作为Master。
+
+    //从masterCandidates中选主
+    //与选主的具体细节实现封装在ElectMasterService类中，例如，判断候选者是否足够，选择具体的节点作为Master等。
+    //从masterCandidates中选主时，首先需要判断当前候选者人数是否达到法定人数，否则选主失败
     private DiscoveryNode findMaster() {
         logger.trace("starting to ping");
         // 到此说明：节点之间的相互投票是通过ping来实现。具体实现类：UnicastZenPing，其构造函数中会读取配置中的discovery.zen.ping.unicast.hosts,保存其他节点的ip.
@@ -898,6 +906,7 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
             // 如果大于，则通过electMaster的electMaster()方法获取自己所投票的master节点并返回。
             if (electMaster.hasEnoughCandidates(masterCandidates)) {
                 //满足条件后，开始正式的选举过程：投票给ID最小的节点
+                //当候选者人数达到法定人数后，从候选者中选一个出来做Master
                 final ElectMasterService.MasterCandidate winner = electMaster.electMaster(masterCandidates);
                 logger.trace("candidate {} won election", winner);
                 return winner.getNode();
@@ -908,6 +917,9 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
                 return null;
             }
         } else {
+            //从activeMasters列表中选择
+            //列表存储着集群当前存在活跃的Master，从这些已知的Master节点中选择一个作为选举结果。选择过程非常简单，取列表中的最小值，比
+            //较函数仍然通过compareNodes实现，activeMasters列表中的节点理论情况下都是具备Master资格的。
             //如果activeMasters不为空，说明该集群中已经存在master节点，那么就在activeMasterss中选择id最小的节点作为自己投票选择的master节点，并返回。
             assert !activeMasters.contains(localNode) :
                 "local node should never be elected as master when other nodes indicate an active master";

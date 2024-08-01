@@ -271,7 +271,9 @@ public class NodeJoinController {
 
         public synchronized int getPendingMasterJoinsCount() {
             int pendingMasterJoins = 0;
+            //遍历当前收到的join请求
             for (DiscoveryNode node : joinRequestAccumulator.keySet()) {
+                //过滤掉不具备master资格的节点
                 if (node.isMasterNode()) {
                     pendingMasterJoins++;
                 }

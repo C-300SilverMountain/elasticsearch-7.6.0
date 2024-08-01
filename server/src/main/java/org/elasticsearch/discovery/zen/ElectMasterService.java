@@ -92,8 +92,10 @@ public class ElectMasterService {
             // we explicitly swap c1 and c2 here. the code expects "better" is lower in a sorted
             // list, so if c2 has a higher cluster state version, it needs to come first.
             // 当存在多个候选节点时，根据版本号和nodeid进行选择
+            //先比较集群状态版本，注意此处c2在前，c1在后（倒序）
             int ret = Long.compare(c2.clusterStateVersion, c1.clusterStateVersion);
             if (ret == 0) {
+                //如果版本号相同，则比较节点ID
                 ret = compareNodes(c1.getNode(), c2.getNode());
             }
             return ret;
@@ -123,10 +125,17 @@ public class ElectMasterService {
         return count;
     }
 
+    /**
+     * 判断当前候选者人数是否达到法定人数，否则选主失败。
+     * @param candidates
+     * @return
+     */
     public boolean hasEnoughCandidates(Collection<MasterCandidate> candidates) {
+        //候选者为空
         if (candidates.isEmpty()) {
             return false;
         }
+        //默认-1，确保单节点的集群可以正常选主。通常用户会配置此参数
         if (minimumMasterNodes < 1) {
             return true;
         }
@@ -144,7 +153,9 @@ public class ElectMasterService {
         //这样，当前节点所要在选举中投票的master节点已经被选出。
         assert hasEnoughCandidates(candidates);
         List<MasterCandidate> sortedCandidates = new ArrayList<>(candidates);
+        //通过自定义的比较函数对候选者节点从小到大排序
         sortedCandidates.sort(MasterCandidate::compare);
+        //返回id最小的作为临时master 或 集群状态版本号最高的
         return sortedCandidates.get(0);
     }
 
@@ -215,7 +226,9 @@ public class ElectMasterService {
 
     /** master nodes go before other nodes, with a secondary sort by id **/
      private static int compareNodes(DiscoveryNode o1, DiscoveryNode o2) {
-        if (o1.isMasterNode() && !o2.isMasterNode()) {
+        //如有一个节点具备master资格，而另一个不具备，则把有master资格的节点排在前面
+         //如果都不具备master资格，或者都具备master资格，则比较节点ID
+         if (o1.isMasterNode() && !o2.isMasterNode()) {
             return -1;
         }
         if (!o1.isMasterNode() && o2.isMasterNode()) {
