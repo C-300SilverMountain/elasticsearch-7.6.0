@@ -650,7 +650,8 @@ public class Node implements Closeable {
 
             //Discovery模块负责发现集群中的节点，以及选择主节点。
             // ES支持多种不同Discovery类型选择，内置的实现有两种：Zen Discovery和Coordinator，其他的包括公有云平台亚马逊的EC2、谷歌的GCE等。
-            //AzureDiscoreyPlugin：微软提供发现插件
+            // Zen Discovery：es内置：封装了节点发现（Ping）、选主等实现过程
+            // AzureDiscoreyPlugin：微软提供发现插件
             //Ec2DiscoveryPlugin：亚马逊提供的发现插件
             //GceDiscoveryPlugin：谷歌提供的发现插件
             //链接：https://www.jianshu.com/p/d3ad414ed4f7
@@ -1043,6 +1044,7 @@ public class Node implements Closeable {
         return this;
     }
 
+    //优雅关闭核心流程
     // During concurrent close() calls we want to make sure that all of them return after the node has completed it's shutdown cycle.
     // If not, the hook that is added in Bootstrap#setup() will be useless:
     // close() might not be executed, in case another (for example api) call to close() has already set some lifecycles to stopped.
@@ -1063,15 +1065,20 @@ public class Node implements Closeable {
         toClose.add(() -> stopWatch.start("node_service"));
         toClose.add(nodeService);
         toClose.add(() -> stopWatch.stop().start("http"));
+        //http传输服务，提供rest接口服务
         toClose.add(injector.getInstance(HttpServerTransport.class));
         toClose.add(() -> stopWatch.stop().start("snapshot_service"));
+        //快照服务
         toClose.add(injector.getInstance(SnapshotsService.class));
+        //负责启动和停止shard级快照
         toClose.add(injector.getInstance(SnapshotShardsService.class));
         toClose.add(() -> stopWatch.stop().start("client"));
         Releasables.close(injector.getInstance(Client.class));
         toClose.add(() -> stopWatch.stop().start("indices_cluster"));
+        //收到集群状态信息后，处理其中索引相关操作
         toClose.add(injector.getInstance(IndicesClusterStateService.class));
         toClose.add(() -> stopWatch.stop().start("indices"));
+        //服务创建、删除索引等索引操作
         toClose.add(injector.getInstance(IndicesService.class));
         // close filter/fielddata caches after indices
         toClose.add(injector.getInstance(IndicesStore.class));
@@ -1081,20 +1088,24 @@ public class Node implements Closeable {
         toClose.add(() -> stopWatch.stop().start("node_connections_service"));
         toClose.add(injector.getInstance(NodeConnectionsService.class));
         toClose.add(() -> stopWatch.stop().start("discovery"));
+        //集群拓扑管理
         toClose.add(injector.getInstance(Discovery.class));
         toClose.add(() -> stopWatch.stop().start("monitor"));
         toClose.add(nodeService.getMonitorService());
         toClose.add(() -> stopWatch.stop().start("gateway"));
         toClose.add(injector.getInstance(GatewayService.class));
         toClose.add(() -> stopWatch.stop().start("search"));
+        //处理搜索请求
         toClose.add(injector.getInstance(SearchService.class));
         toClose.add(() -> stopWatch.stop().start("transport"));
+        //底层传输服务
         toClose.add(injector.getInstance(TransportService.class));
 
         for (LifecycleComponent plugin : pluginLifecycleComponents) {
             toClose.add(() -> stopWatch.stop().start("plugin(" + plugin.getClass().getName() + ")"));
             toClose.add(plugin);
         }
+        //当前的所有插件
         toClose.addAll(pluginsService.filterPlugins(Plugin.class));
 
         toClose.add(() -> stopWatch.stop().start("script"));

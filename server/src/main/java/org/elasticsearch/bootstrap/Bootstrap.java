@@ -210,6 +210,7 @@ final class Bootstrap {
         // initialize probes before the security manager is installed
         initializeProbes();
 
+        //es优雅关机具体实现
         //【资源回收：当系统宕机时，执行资源回收】
         //注册关闭资源的 ShutdownHook,注册一个 ShutdownHook，用于在系统关闭的时候关闭相关的 IO 流、日志上下文
         if (addShutdownHook) {
@@ -219,6 +220,10 @@ final class Bootstrap {
             Runtime.getRuntime().addShutdownHook(new Thread() {
                 @Override
                 public void run() {
+                    //Bootstrap#setup 方法中添加了 shutdown hook，
+                    //当进程收到系统SIGTERM（kill命令默认信号）或SIGINT信号时，调用Node#close方法，执行节点关闭流程。
+                    //每个模块的Service中都实现了doStop和doClose，用于处理这个模块的正常关闭流程。节点总的关闭流程位于Node#close，在close方法的实
+                    //现中，先调用一遍各个模块的doStop，然后再次遍历各个模块执行doClose。
                     try {
                         //逐个调用实例的close方法
                         //node实现了Closeable，Closeable实现了优雅关闭，即自动执行close方法
@@ -360,6 +365,12 @@ final class Bootstrap {
         //即通过elasticsearch.keystore修改keystore加密文件即等于修改用户密码
         //ES 大多数配置都是明文保存的，但是像 X-Pack 中的 security 配置需要进行加密保存，所以这些配置信息就是保存在 elasticsearch.keystore 中
         //https://blog.csdn.net/UbuntuTouch/article/details/113172420
+        //什么是安全配置？本质上是配置信息，既然是配置信息，一般是写
+        //到配置文件中的。ES的几个配置文件在之前的章节提到过。此处的“安
+        //全配置”是为了解决有些敏感的信息不适合放到配置文件中的，因为配
+        //置文件是明文保存的，虽然文件系统有基于用户权限的保护，但这仍然
+        //不够。因此ES把这些敏感配置信息加密，单独放到一个文件中：
+        //config/elasticsearch.keystore。
         final SecureSettings keystore = loadSecureSettings(initialEnv);
         //为啥重新又生成？大概是因为 “完善参数”。执行初始化所需部分参数，initialEnv未读入，如安全相关参数
         //根据保存初始化配置的 initialEnv 和 安全配置 keystore 调用 createEnvironment 重新创建Environment

@@ -85,6 +85,7 @@ public class DiscoveryModule {
     public static final Setting<String> ELECTION_STRATEGY_SETTING =
         new Setting<>("cluster.election.strategy", DEFAULT_ELECTION_STRATEGY, Function.identity(), Property.NodeScope);
 
+    //重点关注属性
     private final Discovery discovery;
 
     public DiscoveryModule(Settings settings, ThreadPool threadPool, TransportService transportService,

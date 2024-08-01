@@ -262,6 +262,12 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
         zenPing.start();
     }
 
+    //ZenDiscovery的选主过程如下：
+    //· 每个节点计算最小的已知节点ID，该节点为临时Master。向该节点发送领导投票。
+    //· 如果一个节点收到足够多的票数，并且该节点也为自己投票，那么它将扮演领导者的角色，开始发布集群状态。
+    //所有节点都会参与选举，并参与投票，但是，只有有资格成为Master的节点（node.master为true）的投票才有效．
+    //获得多少选票可以赢得选举胜利，就是所谓的法定人数。在 ES中，法定大小是一个可配置的参数。配置项：
+    //discovery.zen.minimum_master_nodes。为了避免脑裂，最小值应该是有Master资格的节点数n/2+1。
     @Override
     public void startInitialJoin() {
         // start the join thread from a cluster state update. See {@link JoinThreadControl} for details.
@@ -426,6 +432,12 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
     /**
      * the main function of a join thread. This function is guaranteed to join the cluster
      * or spawn a new join thread upon failure to do so.
+     * 选举临时master:
+     * 1、选举过程的实现位于 ZenDiscovery#findMaster。该函数查找当前集群的活跃 Master，或者从候选者中选择新的Master。
+     * 如果选主成功，则返回选定的临时Master，否则返回空。
+     *
+     * 为什么是临时Master？因为还需要等待下一个步骤，该节点的得票数足够时，才确立为真正的Master。
+     *
      */
     private void innerJoinCluster() {
         //https://blog.csdn.net/weixin_40318210/article/details/81515809
@@ -805,6 +817,18 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
         }
     }
 
+    //临时Master的选举过程如下：
+    //（1）“ping”所有节点，获取节点列表fullPingResponses,ping结果不包含本节点，把本节点单独添加到fullPingResponses中。
+    //（2）构建两个列表。
+    // A、activeMasters列表：存储集群当前活跃Master列表(存活的主节点)。遍历第一步获取的所有节点，将每个节点所认为的当前Master节点加入activeMasters列表中（不包括本节点）。
+    // 在遍历过程中，如果配置了discovery.zen.master_election.ignore_non_master_pings 为 true（默认为false），而节点又不具备Master资格，则跳过该节点。
+           //这个过程是将集群当前已存在的Master加入activeMasters列表，正常情况下只有一个。如果集群已存在Master，则每个节点都记录了当前
+           //Master是哪个，考虑到异常情况下，可能各个节点看到的当前Master不同。在构建activeMasters列表过程中，如果节点不具备Master资格，则
+           //可以通过ignore_non_master_pings选项忽略它认为的那个Master。
+    // B、masterCandidates列表：存储master候选者列表。遍历第一步获取列表，去掉不具备Master资格的节点，添加到这个列表中。
+
+    //（3）如果activeMasters为空，则从masterCandidates中选举，结果可能选举成功，也可能选举失败。如果不为空，则从activeMasters中选择
+    //最合适的作为Master。
     private DiscoveryNode findMaster() {
         logger.trace("starting to ping");
         // 到此说明：节点之间的相互投票是通过ping来实现。具体实现类：UnicastZenPing，其构造函数中会读取配置中的discovery.zen.ping.unicast.hosts,保存其他节点的ip.
