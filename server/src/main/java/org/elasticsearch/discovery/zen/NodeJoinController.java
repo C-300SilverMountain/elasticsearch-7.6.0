@@ -114,7 +114,9 @@ public class NodeJoinController {
                 checkPendingJoinsAndElectIfNeeded();
             }
 
+            //此处实际等待handleJoinRequest，收集到足够的选票后，触发wrapperCallback
             try {
+                //默认等待30s，失败则重新选举
                 if (done.await(timeValue.millis(), TimeUnit.MILLISECONDS)) {
                     // callback handles everything
                     return;

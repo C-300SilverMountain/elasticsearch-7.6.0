@@ -464,6 +464,7 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
         if (transportService.getLocalNode().equals(masterNode)) {
             final int requiredJoins = Math.max(0, electMaster.minimumMasterNodes() - 1); // we count as one
             logger.debug("elected as master, waiting for incoming joins ([{}] needed)", requiredJoins);
+            //默认等待30s
             nodeJoinController.waitToBeElectedAsMaster(requiredJoins, masterElectionWaitForJoinsTimeout,
                     new NodeJoinController.ElectionCallback() {
                         @Override
