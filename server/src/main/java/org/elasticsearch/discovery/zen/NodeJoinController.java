@@ -199,7 +199,8 @@ public class NodeJoinController {
     private synchronized void checkPendingJoinsAndElectIfNeeded() {
         assert electionContext != null : "election check requested but no active context";
         final int pendingMasterJoins = electionContext.getPendingMasterJoinsCount();
-        //接收到的有选举资格的投票数是否满足最小投票数
+        //过半协议判断：检查接收到的且有选举资格的投票数是否满足最小投票数
+        //一旦满足过半协议，立即成为“主节点”
         if (electionContext.isEnoughPendingJoins(pendingMasterJoins) == false) {
             if (logger.isTraceEnabled()) {
                 logger.trace("not enough joins for election. Got [{}], required [{}]", pendingMasterJoins,
@@ -210,7 +211,8 @@ public class NodeJoinController {
                 logger.trace("have enough joins for election. Got [{}], required [{}]", pendingMasterJoins,
                     electionContext.requiredMasterJoins);
             }
-            // 成为主节点、发布集群状态
+            // 当前节点成为“主节点”，并发布（广播）集群状态 & 定期发送ping到集群中所有其他节点
+            //依赖ZenDiscovery.publish广播集群状态，其实就是通知其他节点，本节点已成为“大佬”
             electionContext.closeAndBecomeMaster();
             //清空选举容器，防止后续再次选举的时候导致累加
             electionContext = null; // clear this out so future joins won't be accumulated

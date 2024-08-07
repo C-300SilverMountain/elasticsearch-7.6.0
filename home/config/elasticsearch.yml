@@ -16,7 +16,7 @@
 #
 cluster.name: my-application
 
-node.master: true
+node.master: false
 # 保证debug时，仅请求远程分片，不会请求本地分片
 node.data: true
 #
@@ -66,6 +66,8 @@ network.host: localhost
 # For more information, consult the network module documentation.
 #
 # --------------------------------- Discovery ----------------------------------
+
+discovery.type: legacy-zen
 #
 # Pass an initial list of hosts to perform discovery when this node is started:
 # The default list of hosts is ["127.0.0.1", "[::1]"]

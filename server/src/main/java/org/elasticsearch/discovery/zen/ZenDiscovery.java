@@ -208,6 +208,11 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
                         " master nodes count [" + masterNodes + "]");
                 }
         });
+        //到此为止，选主流程已执行完毕，Master身份已确认，非Master节点已加入集群。
+        //节点失效检测会监控节点是否离线，然后处理其中的异常。失效检测是选主流程之后不可或缺的步骤，不执行失效检测可能会产生脑裂
+        //（双主或多主）。在此我们需要启动两种失效探测器: MasterFaultDetection+NodesFaultDetection
+        //  1、在Master节点，启动NodesFaultDetection，简称NodesFD。定期探测加入集群的节点是否活跃。
+        //  2、在非Master节点启动MasterFaultDetection，简称MasterFD。定期探测Master节点是否活跃。
 
         this.masterFD = new MasterFaultDetection(settings, threadPool, transportService, this::clusterState, masterService, clusterName);
         this.masterFD.addListener(new MasterNodeFailureListener());
@@ -336,7 +341,7 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
             }
 
             pendingStatesQueue.addPending(newState);
-
+            //广播集群状态
             publishClusterState.publish(clusterChangedEvent, electMaster.minimumMasterNodes(), ackListener);
         } catch (FailedToCommitClusterStateException t) {
             // cluster service logs a WARN message
@@ -382,7 +387,7 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
                 );
                 return;
             }
-
+            //心跳：发送Ping请求
             boolean sentToApplier = processNextCommittedClusterState("master " + newState.nodes().getMasterNode() +
                 " committed version [" + newState.version() + "] source [" + clusterChangedEvent.source() + "]");
             if (sentToApplier == false && processedOrFailed.get() == false) {

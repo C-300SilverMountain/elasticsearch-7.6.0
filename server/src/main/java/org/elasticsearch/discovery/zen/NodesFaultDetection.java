@@ -85,6 +85,7 @@ public class NodesFaultDetection extends FaultDetection {
         logger.debug("[node  ] uses ping_interval [{}], ping_timeout [{}], ping_retries [{}]", pingInterval, pingRetryTimeout,
             pingRetryCount);
 
+        //接收请求，并处理
         transportService.registerRequestHandler(
             PING_ACTION_NAME, ThreadPool.Names.SAME, false, false, PingRequest::new, new PingRequestHandler());
     }
