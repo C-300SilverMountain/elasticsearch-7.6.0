@@ -136,6 +136,7 @@ public class PublishClusterStateAction {
         final Map<Version, BytesReference> serializedDiffs;
         final boolean sendFullVersion;
         try {
+            // 首先准备发送集群状态的目标节点列表，剔除本节点。构建增量发布或全量发布集群状态，然后执行序列化并压缩，以便将状态发布出去
             nodes = clusterChangedEvent.state().nodes();
             nodesToPublishTo = new HashSet<>(nodes.getSize());
             DiscoveryNode localNode = nodes.getLocalNode();
@@ -145,17 +146,22 @@ public class PublishClusterStateAction {
                     nodesToPublishTo.add(node);
                 }
             }
+            //全量状态保存在serializedStates，增量状态保存在serializedDiffs。每个集群状态都有自己为一个版本号，在发布集群状态时允许相邻版本好之间只发送增量内容
             sendFullVersion = !discoverySettings.getPublishDiff() || clusterChangedEvent.previousState() == null;
+            //全量状态
             serializedStates = new HashMap<>();
+            //增量状态
             serializedDiffs = new HashMap<>();
 
             // we build these early as a best effort not to commit in the case of error.
             // sadly this is not water tight as it may that a failed diff based publishing to a node
             // will cause a full serialization based on an older version, which may fail after the
             // change has been committed.
+            // 构建序列化后的结果
+            // 构造需要发送的状态，如果上次发布集群状态的节点不存在或设置了全量发送配置，则构建全量状态否则构建增量状态然后进行序列化并压缩
             buildDiffAndSerializeStates(clusterChangedEvent.state(), clusterChangedEvent.previousState(),
                     nodesToPublishTo, sendFullVersion, serializedStates, serializedDiffs);
-
+            // 发布状态返回结果处理
             final BlockingClusterStatePublishResponseHandler publishResponseHandler =
                 new AckClusterStatePublishResponseHandler(nodesToPublishTo, ackListener);
             sendingController = new SendingController(clusterChangedEvent.state(), minMasterNodes,
@@ -165,6 +171,7 @@ public class PublishClusterStateAction {
         }
 
         try {
+            // 广播集群状态
             innerPublish(clusterChangedEvent, nodesToPublishTo, sendingController, ackListener, sendFullVersion, serializedStates,
                 serializedDiffs);
         } catch (FailedToCommitClusterStateException t) {
@@ -187,21 +194,26 @@ public class PublishClusterStateAction {
 
         final ClusterState clusterState = clusterChangedEvent.state();
         final ClusterState previousState = clusterChangedEvent.previousState();
+        //发布超时时间
         final TimeValue publishTimeout = discoverySettings.getPublishTimeout();
-
+        //发布起始时间
         final long publishingStartInNanos = System.nanoTime();
 
+        // 将集群状态 广播到集群中所有其他节点 （注：只能master才能广播集群状态）
         for (final DiscoveryNode node : nodesToPublishTo) {
             // try and serialize the cluster state once (or per version), so we don't serialize it
             // per node when we send it over the wire, compress it while we are at it...
             // we don't send full version if node didn't exist in the previous version of cluster state
             if (sendFullVersion || !previousState.nodes().nodeExists(node)) {
+                //发生全量状态
                 sendFullClusterState(clusterState, serializedStates, node, publishTimeout, sendingController);
             } else {
+                //发布增量状态
                 sendClusterStateDiff(clusterState, serializedDiffs, serializedStates, node, publishTimeout, sendingController);
             }
         }
-
+        // 阻塞等待提交集群状态：二阶段提交
+        // 等待提交，等待第一阶段完成收到足够的响应或达到了超时时间
         sendingController.waitForCommit(discoverySettings.getCommitTimeout());
 
         final long commitTime = System.nanoTime() - publishingStartInNanos;
@@ -240,10 +252,12 @@ public class PublishClusterStateAction {
             try {
                 if (sendFullVersion || !previousState.nodes().nodeExists(node)) {
                     // will send a full reference
+                    // 发送全量
                     if (serializedStates.containsKey(node.getVersion()) == false) {
                         serializedStates.put(node.getVersion(), serializeFullClusterState(clusterState, node.getVersion()));
                     }
                 } else {
+                    // 发送增量
                     // will send a diff
                     if (diff == null) {
                         diff = clusterState.diff(previousState);
@@ -271,6 +285,7 @@ public class PublishClusterStateAction {
                 return;
             }
         }
+        // 发送集群状态到指定 节点
         sendClusterStateToNode(clusterState, bytes, node, publishTimeout, sendingController, false, serializedStates);
     }
 
@@ -288,7 +303,10 @@ public class PublishClusterStateAction {
                                         final SendingController sendingController,
                                         final boolean sendDiffs, final Map<Version, BytesReference> serializedStates) {
         try {
-
+            // 重点：以下是二阶段具体实现
+            // es使用二阶段提交来实现状态发布，第一步是push及先将状态数据发送到node节点，但不应用，如果得到超过半数的节点的返回确认，则执行第二步commit及发送提交请求.
+            // 二阶段提交不能保证节点收到commit请求后可以正确应用，也就是它只能保证发了commit请求，但是无法保证单个节点上的状态应用是成功还是失败的
+            // 参考：https://blog.csdn.net/GeekerJava/article/details/139866149
             transportService.sendRequest(node, SEND_ACTION_NAME,
                     new BytesTransportRequest(bytes, node.getVersion()),
                     stateRequestOptions,
@@ -296,10 +314,12 @@ public class PublishClusterStateAction {
 
                         @Override
                         public void handleResponse(TransportResponse.Empty response) {
+                            //发布超时
                             if (sendingController.getPublishingTimedOut()) {
                                 logger.debug("node {} responded for cluster state [{}] (took longer than [{}])", node,
                                     clusterState.version(), publishTimeout);
                             }
+                            // 检查收到的响应是否过半，然后执行commit
                             sendingController.onNodeSendAck(node);
                         }
 
@@ -542,6 +562,7 @@ public class PublishClusterStateAction {
 
         public synchronized void onNodeSendAck(DiscoveryNode node) {
             if (committed) {
+                //提交状态
                 assert sendAckedBeforeCommit.isEmpty();
                 sendCommitToNode(node, clusterState, this);
             } else if (committedOrFailed()) {
@@ -550,6 +571,7 @@ public class PublishClusterStateAction {
                 // we're still waiting
                 sendAckedBeforeCommit.add(node);
                 if (node.isMasterNode()) {
+                    // 检查返回ack的节点数，如果超过了半数就执行commit：即将committed状态设置为true
                     checkForCommitOrFailIfNoPending(node);
                 }
             }
@@ -566,10 +588,12 @@ public class PublishClusterStateAction {
         private synchronized void checkForCommitOrFailIfNoPending(DiscoveryNode masterNode) {
             logger.trace("master node {} acked cluster state version [{}]. processing ... (current pending [{}], needed [{}])",
                     masterNode, clusterState.version(), pendingMasterNodes, neededMastersToCommit);
+            // 检查返回ack的节点数，如果超过了半数就执行commit
             neededMastersToCommit--;
             if (neededMastersToCommit == 0) {
                 if (markAsCommitted()) {
                     for (DiscoveryNode nodeToCommit : sendAckedBeforeCommit) {
+                        // 接收到了足够的响应后开始执行commit逻辑
                         sendCommitToNode(nodeToCommit, clusterState, this);
                     }
                     sendAckedBeforeCommit.clear();

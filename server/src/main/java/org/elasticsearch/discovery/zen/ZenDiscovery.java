@@ -341,7 +341,7 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
             }
 
             pendingStatesQueue.addPending(newState);
-            //广播集群状态
+            // 广播集群状态
             publishClusterState.publish(clusterChangedEvent, electMaster.minimumMasterNodes(), ackListener);
         } catch (FailedToCommitClusterStateException t) {
             // cluster service logs a WARN message
@@ -387,6 +387,8 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
                 );
                 return;
             }
+
+            //经过二阶段提交状态已经发布到了集群，但不能保证所有节点都成功了，下面处理提交后的集群状态
             //心跳：发送Ping请求
             boolean sentToApplier = processNextCommittedClusterState("master " + newState.nodes().getMasterNode() +
                 " committed version [" + newState.version() + "] source [" + clusterChangedEvent.source() + "]");

@@ -299,6 +299,7 @@ public class NodeJoinController {
             tasks.put(JoinTaskExecutor.newBecomeMasterTask(), (source1, e) -> {
             });
             tasks.put(JoinTaskExecutor.newFinishElectionTask(), electionFinishedListener);
+            //MasterService主要负责集群任务管理和运行，只有主节点会提交集群任务到内部队列，并运行队列中的任务
             masterService.submitStateUpdateTasks(source, tasks, ClusterStateTaskConfig.build(Priority.URGENT), joinTaskExecutor);
         }
 

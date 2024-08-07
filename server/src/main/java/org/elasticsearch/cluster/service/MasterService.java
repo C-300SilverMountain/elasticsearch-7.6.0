@@ -207,8 +207,9 @@ public class MasterService extends AbstractLifecycleComponent {
         }
 
         logger.debug("executing cluster state update for [{}]", summary);
+        // 上一次集群状态
         final ClusterState previousClusterState = state();
-
+        // 保证只能在master上执行任务
         if (!previousClusterState.nodes().isLocalNodeElectedMaster() && taskInputs.runOnlyWhenMaster()) {
             logger.debug("failing [{}]: local node is no longer master", summary);
             taskInputs.onNoLongerMaster();
@@ -216,17 +217,19 @@ public class MasterService extends AbstractLifecycleComponent {
         }
 
         final long computationStartTime = threadPool.relativeTimeInMillis();
+        // 执行task任务生成 “新的集群状态”
         final TaskOutputs taskOutputs = calculateTaskOutputs(taskInputs, previousClusterState);
         taskOutputs.notifyFailedTasks();
         final TimeValue computationTime = getTimeSince(computationStartTime);
         logExecutionTime(computationTime, "compute cluster state update", summary);
-
+        // 判断 “上一次集群状态” 与 “最新集群状态” 是否相等
         if (taskOutputs.clusterStateUnchanged()) {
             final long notificationStartTime = threadPool.relativeTimeInMillis();
             taskOutputs.notifySuccessfulTasksOnUnchangedClusterState();
             final TimeValue executionTime = getTimeSince(notificationStartTime);
             logExecutionTime(executionTime, "notify listeners on unchanged cluster state", summary);
         } else {
+            // 发现：集群状态发生变化
             final ClusterState newClusterState = taskOutputs.newClusterState;
             if (logger.isTraceEnabled()) {
                 logger.trace("cluster state updated, source [{}]\n{}", summary, newClusterState);
@@ -247,6 +250,7 @@ public class MasterService extends AbstractLifecycleComponent {
                 }
 
                 logger.debug("publishing cluster state version [{}]", newClusterState.version());
+                // 一旦集群状态发生变化，则广播集群状态
                 publish(clusterChangedEvent, taskOutputs, publicationStartTime);
             } catch (Exception e) {
                 handleException(summary, publicationStartTime, newClusterState, e);
@@ -265,6 +269,8 @@ public class MasterService extends AbstractLifecycleComponent {
                 return isMasterUpdateThread() || super.blockingAllowed();
             }
         };
+        // ClusterStatePublisher是抽象类，具体类：ZenDiscovery（旧版ES用它） 和 Coordinator（新版ES用它，7.6默认）
+        //先关注：ZenDiscovery
         clusterStatePublisher.publish(clusterChangedEvent, fut, taskOutputs.createAckListener(threadPool, clusterChangedEvent.state()));
 
         // indefinitely wait for publication to complete
