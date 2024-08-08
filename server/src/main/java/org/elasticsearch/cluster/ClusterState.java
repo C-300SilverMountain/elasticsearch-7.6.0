@@ -94,6 +94,9 @@ import static org.elasticsearch.cluster.coordination.Coordinator.ZEN1_BWC_TERM;
  * make sure that the correct diffs are applied. If uuids don’t match, the {@link ClusterStateDiff#apply} method
  * throws the {@link IncompatibleClusterStateVersionException}, which causes the publishing mechanism to send
  * a full version of the cluster state to the node on which this exception was thrown.
+ *
+ * 通过访问es_http/_cluster/state，可以看到es集群ClusterState详情：
+ * https://www.elastic.co/guide/en/elasticsearch/reference/7.6/cluster-stats.html
  */
 public class ClusterState implements ToXContentFragment, Diffable<ClusterState> {
 
@@ -161,20 +164,21 @@ public class ClusterState implements ToXContentFragment, Diffable<ClusterState> 
 
     public static final long UNKNOWN_VERSION = -1;
 
+    //版本号
     private final long version;
 
     private final String stateUUID;
-
+    //路由表
     private final RoutingTable routingTable;
-
+    //节点信息
     private final DiscoveryNodes nodes;
-
+    //元数据
     private final MetaData metaData;
 
     private final ClusterBlocks blocks;
 
     private final ImmutableOpenMap<String, Custom> customs;
-
+    //集群名称
     private final ClusterName clusterName;
 
     private final boolean wasReadFromDiff;

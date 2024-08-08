@@ -944,9 +944,9 @@ public class Node implements Closeable {
             : "clusterService has a different local node than the factory provided";
         transportService.acceptIncomingRequests(); //说明TransportService已准备好，可接收请求。
         // 选举流程：
+        // 默认调用Coordinator的startInitialJoin()方法开始加入集群并准备进行参与选举。
         // https://blog.csdn.net/weixin_40318210/article/details/81515809
         // https://blog.csdn.net/kissfox220/article/details/119956861
-        // 默认调用Coordinator的startInitialJoin()方法开始加入集群并准备进行参与选举。
         discovery.startInitialJoin();
         final TimeValue initialStateTimeout = DiscoverySettings.INITIAL_STATE_TIMEOUT_SETTING.get(settings());
         configureNodeAndClusterIdStateListener(clusterService);

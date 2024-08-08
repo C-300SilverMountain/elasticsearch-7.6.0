@@ -589,6 +589,7 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
     }
 
     private void removeNode(final DiscoveryNode node, final String source, final String reason) {
+        // 主节点：移除 “无法ping通的节点”，NodeRemovalClusterStateTaskExecutor.execute 》 ZenNodeRemovalClusterStateTaskExecutor.getTaskClusterTasksResult
         masterService.submitStateUpdateTask(
                 source + "(" + node + "), reason(" + reason + ")",
                 new NodeRemovalClusterStateTaskExecutor.Task(node, reason),
@@ -1316,6 +1317,7 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
         @Override
         protected ClusterTasksResult<Task> getTaskClusterTasksResult(ClusterState currentState, List<Task> tasks,
                                                                      ClusterState remainingNodesClusterState) {
+            // 判断节点数是否满足过半，不满足，本主节点放弃master身份，重新加入集群，避免脑裂
             if (electMasterService.hasEnoughMasterNodes(remainingNodesClusterState.nodes()) == false) {
                 final ClusterTasksResult.Builder<Task> resultBuilder = ClusterTasksResult.<Task>builder().successes(tasks);
                 final int masterNodes = electMasterService.countMasterNodes(remainingNodesClusterState.nodes());

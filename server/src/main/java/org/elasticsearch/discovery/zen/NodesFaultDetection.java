@@ -115,6 +115,11 @@ public class NodesFaultDetection extends FaultDetection {
      * part of the cluster will be stopped
      */
     public void updateNodesAndPing(ClusterState clusterState) {
+        // NodesFaultDetection是主节点运行的任务：目标是发送心跳包到集群中的其他节点
+        // 一旦检测到有节点离开，检查一下当前集群总节点数是否达到法定节点数（过半），如果不足，则会放弃 Master 身份，重新加入集群。《避免脑裂》
+        // 为什么这么干？
+        // 假设有5台机器组成的集群产生网络分区，2台组成一组，另外3台组成一组，产生分区前，原Master为Node1。
+        // 此时3台一组的节点会重新选举并成功选取Noded3作为Master，会不会产生双主？
         // remove any nodes we don't need, this will cause their FD to stop
         for (DiscoveryNode monitoredNode : nodesFD.keySet()) {
             if (!clusterState.nodes().nodeExists(monitoredNode)) {
@@ -246,6 +251,7 @@ public class NodesFaultDetection extends FaultDetection {
 
                         @Override
                         public void handleException(TransportException exp) {
+                            //重点逻辑：三秒ping三次，三次都失败，则将对方从列表中移除
                             if (!running()) {
                                 return;
                             }
@@ -258,6 +264,7 @@ public class NodesFaultDetection extends FaultDetection {
                             logger.trace( () -> new ParameterizedMessage(
                                     "[node  ] failed to ping [{}], retry [{}] out of [{}]", node, retryCount, pingRetryCount), exp);
                             if (retryCount >= pingRetryCount) {
+                                // ping失败：一旦ping失败次数超过重新次数，则移除相应节点，移除后，会判断当前所有节点是否满足过半，不满足则放弃master身份,重新加入集群
                                 logger.debug("[node  ] failed to ping [{}], tried [{}] times, each with  maximum [{}] timeout", node,
                                     pingRetryCount, pingRetryTimeout);
                                 // not good, failure
