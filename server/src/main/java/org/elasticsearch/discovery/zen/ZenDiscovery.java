@@ -643,6 +643,7 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
     }
 
     private void handleMasterGone(final DiscoveryNode masterNode, final Throwable cause, final String reason) {
+        // 探测Master离线的处理很简单，重新加入集群。本质上就是该节点重新执行一遍选主的流程
         if (lifecycleState() != Lifecycle.State.STARTED) {
             // not started, ignore a master failure
             return;
@@ -658,6 +659,7 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
             if (localNodeMaster() == false && masterNode.equals(committedState.get().nodes().getMasterNode())) {
                 // flush any pending cluster states from old master, so it will not be set as master again
                 pendingStatesQueue.failAllStatesAndClear(new ElasticsearchException("master left [{}]", reason));
+                // 重新加入集群
                 rejoin("master left (reason = " + reason + ")");
             }
         }

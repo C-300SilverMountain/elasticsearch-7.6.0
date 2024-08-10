@@ -169,6 +169,8 @@ public class ClusterState implements ToXContentFragment, Diffable<ClusterState> 
 
     private final String stateUUID;
     //路由表
+    //每个索引操作首先会使用routing参数解析到副本组，通常基于文档ID。一旦确定副本组，就会内部转发该操作到分片组的主分片中。主分
+    //片负责验证操作和转发它到其他副分片。
     private final RoutingTable routingTable;
     //节点信息
     private final DiscoveryNodes nodes;
