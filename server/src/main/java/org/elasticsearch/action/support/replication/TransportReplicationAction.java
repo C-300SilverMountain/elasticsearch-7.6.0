@@ -154,6 +154,7 @@ public abstract class TransportReplicationAction<
     @Override
     protected void doExecute(Task task, Request request, ActionListener<Response> listener) {
         assert request.shardId() != null : "request shardId must be set";
+        //将请求路由到primary 分片所在的节点
         new ReroutePhase((ReplicationTask) task, request, listener).run();
     }
 
@@ -678,6 +679,7 @@ public abstract class TransportReplicationAction<
                     return;
                 }
                 final DiscoveryNode node = state.nodes().get(primary.currentNodeId());
+                // 将请求路由到主分片所在的主节点
                 if (primary.currentNodeId().equals(state.nodes().getLocalNodeId())) {
                     performLocalAction(state, primary, node, indexMetaData);
                 } else {
@@ -692,6 +694,7 @@ public abstract class TransportReplicationAction<
                 logger.trace("send action [{}] to local primary [{}] for request [{}] with cluster state version [{}] to [{}] ",
                     transportPrimaryAction, request.shardId(), request, state.version(), primary.currentNodeId());
             }
+            // 触发TransportReplicationAction相应的Handler，在TransportReplicationAction构造函数中注册的
             performAction(node, transportPrimaryAction, true,
                 new ConcreteShardRequest<>(request, primary.allocationId().getId(), indexMetaData.primaryTerm(primary.id())));
         }

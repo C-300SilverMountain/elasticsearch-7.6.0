@@ -116,8 +116,10 @@ public class InboundHandler {
             message.getStoredContext().restore();
             threadContext.putTransient("_remote_address", remoteAddress);
             if (message.isRequest()) {
+                //处理外部请求
                 handleRequest(channel, (InboundMessage.Request) message, reference.length());
             } else {
+                //处理响应
                 final TransportResponseHandler<?> handler;
                 // 根据requestId找到对应的handler比较处理，这里的requestId，相当与session，当前节点唯一
                 //接收到集群中其他节点的响应，根据响应内容中的requestid，找到对应的处理器，然后执行它

@@ -40,6 +40,22 @@ import java.util.Locale;
 import static org.elasticsearch.rest.RestRequest.Method.POST;
 import static org.elasticsearch.rest.RestRequest.Method.PUT;
 
+/**
+ * 写入流程debug:
+ * 1、断点RestController
+ * 2、发送请求:
+ * POST http://localhost:9200/accounts/_doc/4
+ * Content-Type: application/json
+ *
+ * {
+ *   "user": "张三",
+ *   "title": "工程师",
+ *   "desc": "数据管理员"
+ * }
+ * 3、RestController转发给RestIndexAction
+ * 4、RestIndexAction转发给TransportIndexAction
+ * 5、TransportIndexAction转发给TransportBulkAction
+ */
 public class RestIndexAction extends BaseRestHandler {
     private static final DeprecationLogger deprecationLogger = new DeprecationLogger(
         LogManager.getLogger(RestDeleteAction.class));
@@ -145,7 +161,7 @@ public class RestIndexAction extends BaseRestHandler {
         if (sOpType != null) {
             indexRequest.opType(sOpType);
         }
-
+        // 实际调用NodeClient.index
         return channel ->
                 client.index(indexRequest, new RestStatusToXContentListener<>(channel, r -> r.getLocation(indexRequest.routing())));
     }
