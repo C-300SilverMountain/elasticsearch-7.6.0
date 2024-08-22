@@ -111,6 +111,7 @@ public class RestSearchAction extends BaseRestHandler {
 
         //重点：这里实现accept方法
         return channel -> {
+            // RestStatusToXContentListener:发送检索结果集给用户
             RestStatusToXContentListener<SearchResponse> listener = new RestStatusToXContentListener<>(channel);
             HttpChannelTaskHandler.INSTANCE.execute(client, request.getHttpChannel(), searchRequest, SearchAction.INSTANCE, listener);
         };

@@ -89,6 +89,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * The action samples cluster state on the receiving node to reroute to node with primary copy and on the
  * primary node to validate request before primary operation followed by sampling state again for resolving
  * nodes with replica copies to perform replication.
+ *
+ * TransportReplicationAction：副本操作，包含主副本和从副本
  */
 public abstract class TransportReplicationAction<
             Request extends ReplicationRequest<Request>,
@@ -635,6 +637,7 @@ public abstract class TransportReplicationAction<
                     finishAsFailed(blockException);
                 }
             } else {
+                // 索引元数据
                 final IndexMetaData indexMetaData = state.metaData().index(request.shardId().getIndex());
                 if (indexMetaData == null) {
                     // ensure that the cluster state on the node is at least as high as the node that decided that the index was there
@@ -652,6 +655,7 @@ public abstract class TransportReplicationAction<
                     }
                 }
 
+                // 索引已关闭
                 if (indexMetaData.getState() == IndexMetaData.State.CLOSE) {
                     finishAsFailed(new IndexClosedException(indexMetaData.getIndex()));
                     return;
@@ -665,6 +669,8 @@ public abstract class TransportReplicationAction<
                 assert request.waitForActiveShards() != ActiveShardCount.DEFAULT :
                     "request waitForActiveShards must be set in resolveRequest";
 
+                // 重点：
+                // 1、获取主分片路由信息，用于将请求路由到主分片所在的节点
                 final ShardRouting primary = state.getRoutingTable().shardRoutingTable(request.shardId()).primaryShard();
                 if (primary == null || primary.active() == false) {
                     logger.trace("primary shard [{}] is not yet active, scheduling a retry: action [{}], request [{}], "
@@ -678,8 +684,9 @@ public abstract class TransportReplicationAction<
                     retryBecauseUnavailable(request.shardId(), "primary shard isn't assigned to a known node.");
                     return;
                 }
+                // 主分片对应的节点
                 final DiscoveryNode node = state.nodes().get(primary.currentNodeId());
-                // 将请求路由到主分片所在的主节点
+                // 2、 将请求路由到主分片所在的主节点
                 if (primary.currentNodeId().equals(state.nodes().getLocalNodeId())) {
                     performLocalAction(state, primary, node, indexMetaData);
                 } else {

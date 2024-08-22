@@ -69,7 +69,7 @@ public abstract class TransportAction<Request extends ActionRequest, Response ex
         execute(task, request, new ActionListener<Response>() {
             @Override
             public void onResponse(Response response) {
-                try { //这里拿到的仅是ACK，代表发送出去了，并没有得到真实数据
+                try {
                     taskManager.unregister(task);
                 } finally {
                     listener.onResponse(response);
@@ -129,7 +129,7 @@ public abstract class TransportAction<Request extends ActionRequest, Response ex
         if (task != null && request.getShouldStoreResult()) {
             listener = new TaskResultStoringActionListener<>(taskManager, task, listener);
         }
-        //链式调用
+        //链式调用：逐个调用Filter，通常是拦截请求，做权限判断
         RequestFilterChain<Request, Response> requestFilterChain = new RequestFilterChain<>(this, logger);
         requestFilterChain.proceed(task, actionName, request, listener);
     }

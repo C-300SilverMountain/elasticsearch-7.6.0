@@ -42,7 +42,7 @@ import static org.elasticsearch.rest.RestRequest.Method.PUT;
 
 /**
  * 写入流程debug:
- * 1、断点RestController
+ * 1、断点RestController.dispatchRequest
  * 2、发送请求:
  * POST http://localhost:9200/accounts/_doc/4
  * Content-Type: application/json
@@ -52,7 +52,7 @@ import static org.elasticsearch.rest.RestRequest.Method.PUT;
  *   "title": "工程师",
  *   "desc": "数据管理员"
  * }
- * 3、RestController转发给RestIndexAction
+ * 3、RestController.dispatchRequest根据请求url，通过 前缀树PathTrie 定位到RestIndexAction，然转发请求给RestIndexAction
  * 4、RestIndexAction转发给TransportIndexAction
  * 5、TransportIndexAction转发给TransportBulkAction
  */
@@ -161,7 +161,9 @@ public class RestIndexAction extends BaseRestHandler {
         if (sOpType != null) {
             indexRequest.opType(sOpType);
         }
-        // 实际调用NodeClient.index
+        // 实际调用NodeClient.index，然后转发给TransportIndexAction
+        // NodeClient是连接 Rest*Action 与 Transport*Action的中介
+        // RestStatusToXContentListener：发送操作结果给用户
         return channel ->
                 client.index(indexRequest, new RestStatusToXContentListener<>(channel, r -> r.getLocation(indexRequest.routing())));
     }

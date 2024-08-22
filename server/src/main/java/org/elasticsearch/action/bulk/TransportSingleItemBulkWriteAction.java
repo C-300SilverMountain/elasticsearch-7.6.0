@@ -49,6 +49,7 @@ public abstract class TransportSingleItemBulkWriteAction<
 
     @Override
     protected void doExecute(Task task, final Request request, final ActionListener<Response> listener) {
+        // 实际执行TransportBulkAction.doExecute
         bulkAction.execute(task, toSingleItemBulkRequest(request), wrapBulkResponse(listener));
     }
 

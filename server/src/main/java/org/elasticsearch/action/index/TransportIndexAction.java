@@ -36,6 +36,8 @@ import org.elasticsearch.transport.TransportService;
  * </ul>
  *
  * Deprecated use TransportBulkAction with a single item instead
+ *
+ * 委托给TransportBulkAction处理
  */
 @Deprecated
 public class TransportIndexAction extends TransportSingleItemBulkWriteAction<IndexRequest, IndexResponse> {

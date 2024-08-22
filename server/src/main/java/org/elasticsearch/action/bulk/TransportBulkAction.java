@@ -93,6 +93,7 @@ import static java.util.Collections.emptyMap;
 /**
  * Groups bulk request items by shard, optionally creating non-existent indices and
  * delegates to {@link TransportShardBulkAction} for shard-level bulk execution
+ * 委托给TransportShardBulkAction处理
  */
 public class TransportBulkAction extends HandledTransportAction<BulkRequest, BulkResponse> {
 
@@ -162,6 +163,7 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
         boolean hasIndexRequestsWithPipelines = false;
         final MetaData metaData = clusterService.state().getMetaData();
         final Version minNodeVersion = clusterService.state().getNodes().getMinNodeVersion();
+        // 1、判断是否需要执行pipeline
         for (DocWriteRequest<?> actionRequest : bulkRequest.requests) {
             IndexRequest indexRequest = getIndexWriteRequest(actionRequest);
             if (indexRequest != null) {
@@ -180,7 +182,7 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
                 }
             }
         }
-
+        // 1.1 执行pipeline
         if (hasIndexRequestsWithPipelines) {
             // this method (doExecute) will be called again, but with the bulk requests updated from the ingest node processing but
             // also with IngestService.NOOP_PIPELINE_NAME on each request. This ensures that this on the second time through this method,
@@ -207,6 +209,7 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
         }
 
         if (needToCheck()) {
+            // 2、收集需要自动创建的索引
             // Attempt to create all the indices that we're going to need during the bulk before we start.
             // Step 1: collect all the indices in the request
             final Set<String> indices = bulkRequest.requests.stream()
@@ -237,14 +240,18 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
             }
             // Step 3: create all the indices that are missing, if there are any missing. start the bulk after all the creates come back.
             if (autoCreateIndices.isEmpty()) {
+                // 3、执行批处理
                 executeBulk(task, bulkRequest, startTime, listener, responses, indicesThatCannotBeCreated);
-            } else {//如果 autoCreateIndices 不为空，则说明需要创建索引，此时遍历 autoCreateIndices，为各个不存在的索引调用 createIndex 方法进行创建索引。
+            } else {
+                // 2.1 执行创建索引
+                //如果 autoCreateIndices 不为空，则说明需要创建索引，此时遍历 autoCreateIndices，为各个不存在的索引调用 createIndex 方法进行创建索引。
                 final AtomicInteger counter = new AtomicInteger(autoCreateIndices.size());
                 for (String index : autoCreateIndices) {
                     createIndex(index, bulkRequest.timeout(), new ActionListener<CreateIndexResponse>() {
                         @Override
                         public void onResponse(CreateIndexResponse result) {
                             if (counter.decrementAndGet() == 0) {
+                                // 3、执行批处理
                                 threadPool.executor(ThreadPool.Names.WRITE).execute(
                                     () -> executeBulk(task, bulkRequest, startTime, listener, responses, indicesThatCannotBeCreated));
                             }
@@ -272,6 +279,7 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
                 }
             }
         } else {
+            // 3、执行批处理
             executeBulk(task, bulkRequest, startTime, listener, responses, emptyMap());
         }
     }
@@ -419,6 +427,7 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
             if (handleBlockExceptions(clusterState)) {
                 return;
             }
+            // 1、 参数校验
             final ConcreteIndices concreteIndices = new ConcreteIndices(clusterState, indexNameExpressionResolver);
             MetaData metaData = clusterState.metaData();
             for (int i = 0; i < bulkRequest.requests.size(); i++) {
@@ -465,6 +474,7 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
                 }
             }
 
+            // 2. 按分片策略将请求分组，因为id不同的doc，位于不同的分片，需要发送到不同的节点上。最后会得到Map<分片ID，List<请求>>
             // first, go over all the requests and create a ShardId -> Operations mapping
             Map<ShardId, List<BulkItemRequest>> requestsByShard = new HashMap<>();
             for (int i = 0; i < bulkRequest.requests.size(); i++) {
@@ -485,6 +495,7 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
                 return;
             }
 
+            // 3、 将请求分发到不同的分片上，由TransportShardBulkAction执行分发
             final AtomicInteger counter = new AtomicInteger(requestsByShard.size());
             String nodeId = clusterService.localNode().getId();
             for (Map.Entry<ShardId, List<BulkItemRequest>> entry : requestsByShard.entrySet()) {
@@ -496,8 +507,10 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
                 bulkShardRequest.timeout(bulkRequest.timeout());
                 bulkShardRequest.routedBasedOnClusterVersion(clusterState.version());
                 if (task != null) {
+                    // 监控时，使用这些ID，串起来
                     bulkShardRequest.setParentTask(nodeId, task.getId());
                 }
+                // 4、交由TransportShardBulkAction.doExecute ，该方法由父类TransportReplicationAction继承得来
                 shardBulkAction.execute(bulkShardRequest, new ActionListener<BulkShardResponse>() {
                     @Override
                     public void onResponse(BulkShardResponse bulkShardResponse) {
@@ -611,6 +624,7 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
 
     void executeBulk(Task task, final BulkRequest bulkRequest, final long startTimeNanos, final ActionListener<BulkResponse> listener,
             final AtomicArray<BulkItemResponse> responses, Map<String, IndexNotFoundException> indicesThatCannotBeCreated) {
+        // 由内部类执行批处理操作：有啥好处，类职责分离？
         new BulkOperation(task, bulkRequest, listener, responses, startTimeNanos, indicesThatCannotBeCreated).run();
     }
 
