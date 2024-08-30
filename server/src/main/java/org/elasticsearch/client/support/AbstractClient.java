@@ -407,7 +407,7 @@ public abstract class AbstractClient implements Client {
     @Override
     public void index(final IndexRequest request, final ActionListener<IndexResponse> listener) {
         // 实际交由key=IndexAction.INSTANCE 的TransportAction处理，即：TransportIndexAction
-        // 中间会经过 过滤器，最终会调用TransportIndexAction.doExecute
+        // 中间会经过 过滤器，最终会调用 TransportIndexAction.doExecute
         //doExecute方法中，转发请求给 TransportBulkAction.execute
         execute(IndexAction.INSTANCE, request, listener);
     }

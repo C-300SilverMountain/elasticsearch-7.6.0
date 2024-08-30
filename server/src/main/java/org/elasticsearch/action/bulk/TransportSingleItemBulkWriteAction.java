@@ -47,9 +47,16 @@ public abstract class TransportSingleItemBulkWriteAction<
         this.bulkAction = bulkAction;
     }
 
+    /**
+     *
+     * @param task
+     * @param request
+     * @param listener 该监听器专门响应用户请求的，即向用户发送响应内容
+     */
     @Override
     protected void doExecute(Task task, final Request request, final ActionListener<Response> listener) {
-        // 实际执行TransportBulkAction.doExecute
+        // 1、实际执行TransportBulkAction.doExecute
+        // 2、调用wrapBulkResponse对listener进一步包装，使其具备 “校验” 响应内容能力
         bulkAction.execute(task, toSingleItemBulkRequest(request), wrapBulkResponse(listener));
     }
 

@@ -163,7 +163,7 @@ public class RestIndexAction extends BaseRestHandler {
         }
         // 实际调用NodeClient.index，然后转发给TransportIndexAction
         // NodeClient是连接 Rest*Action 与 Transport*Action的中介
-        // RestStatusToXContentListener：发送操作结果给用户
+        // RestStatusToXContentListener：发送操作结果给用户，即发送响应内容
         return channel ->
                 client.index(indexRequest, new RestStatusToXContentListener<>(channel, r -> r.getLocation(indexRequest.routing())));
     }

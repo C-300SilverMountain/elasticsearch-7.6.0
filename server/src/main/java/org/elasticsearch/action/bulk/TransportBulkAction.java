@@ -521,6 +521,7 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
                             }
                             responses.set(bulkItemResponse.getItemId(), bulkItemResponse);
                         }
+                        // 响应用户请求：当最后一个分片的请求发送成功后，发送操作结果给用户
                         if (counter.decrementAndGet() == 0) {
                             finishHim();
                         }

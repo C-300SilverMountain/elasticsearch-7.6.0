@@ -250,6 +250,7 @@ public class TransportShardBulkAction extends TransportWriteAction<BulkShardRequ
             result = primary.applyDeleteOperationOnPrimary(version, request.type(), request.id(), request.versionType(),
                 request.ifSeqNo(), request.ifPrimaryTerm());
         } else {
+            //在主分片执行index操作
             final IndexRequest request = context.getRequestToExecute();
             result = primary.applyIndexOperationOnPrimary(version, request.versionType(), new SourceToParse(
                     request.index(), request.type(), request.id(), request.source(), request.getContentType(), request.routing()),
