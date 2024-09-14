@@ -52,6 +52,16 @@ import static org.elasticsearch.cluster.routing.allocation.decider.Decision.YES;
  * will return {@link Decision#THROTTLE} as a hit to upstream logic to throttle
  * the allocation process to prevent overloading nodes due to too many concurrent recovery
  * processes.
+ *
+ * ThrottlingAllocationDecider
+ * 定义了Allocate策略，避免过多的Recoving Allocation，结合系统的动态配置，避免过多的Recoving任务导致该Node的负载过高，
+ * 相关配置有：
+ * ”cluster.routing.allocation.node_initial_primaries_recoveries”，当前Node在进行主分片恢复的数量，默认为四个，
+ * ES内部是通过统计主Shard是否处于初始化状态，并且不是出于从其他节点reloacting过来，
+ * 另外，”cluster.routing.allocation.node_concurrent_incoming_recoveries”，默认是2，
+ * 通常是其他Node上的副本shard恢复到该Node上，
+ * 以及”cluster.routing.allocation.node_concurrent_outgoing_recoveries”，默认为2，
+ * 通常是当前节点上的主节点恢复副本Shard到其他Node上 “cluster.routing.allocation.node_concurrent_recoveries”，用来直接配置上面incoming和outgoing两个值的和。
  */
 public class ThrottlingAllocationDecider extends AllocationDecider {
 

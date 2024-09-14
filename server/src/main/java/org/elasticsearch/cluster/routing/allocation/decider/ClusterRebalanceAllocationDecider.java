@@ -46,6 +46,13 @@ import org.elasticsearch.common.settings.Settings;
  * <li>{@code always} - Re-balancing is allowed once a shard replication group
  * is active</li>
  * </ul>
+ *
+ * ClusterRebalanceAllocationDecider： 定义了Rebalance策略，检查系统动态配置”cluster.routing.allocation.allow_rebalance”，可以配置这些选项:
+ * 1、always - 不管如何都允许Rebalance.
+ * 2、indices_primaries_active - 集群内所有主分片都已经分配后，允许Rebalance，也就是在集群是red状态不允许Rebalance.
+ * 3、indices_all_active - (default) 所有的分片一分配才允许Rebalance，此时集群状态要是green状才行
+ * 默认配置是所有分片均已分配，也就是集群是green状态的才允许Rebalance操作。
+ * https://cloud.tencent.com/developer/article/1361266
  */
 public class ClusterRebalanceAllocationDecider extends AllocationDecider {
 

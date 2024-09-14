@@ -168,7 +168,7 @@ public class RestoreService implements ClusterStateApplier {
 
     /**
      * Restores snapshot specified in the restore request.
-     *
+     * 从Snapshot中恢复index
      * @param request  restore request
      * @param listener restore listener
      */

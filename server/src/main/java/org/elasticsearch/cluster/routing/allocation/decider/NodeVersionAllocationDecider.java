@@ -32,6 +32,11 @@ import org.elasticsearch.cluster.routing.allocation.RoutingAllocation;
  * a newer version than the node we relocate to this might cause {@link org.apache.lucene.index.IndexFormatTooNewException}
  * on the lowest level since it might have already written segments that use a new postings format or codec that is not
  * available on the target node.
+
+ * NodeVersionAllocationDecider
+ * 定义了Allocate策略，检查分片所在Node的版本是否高于目标Node的ES版本，如果高于，不允许allocation，
+ * 这种策略的目的是避免目标Node无法适配高版本lucencn格式的文件，一般集群ES都是一致的，当集群在进行ES版本滚动升级时，会出现版本不一致的情况。
+ * https://cloud.tencent.com/developer/article/1361266
  */
 public class NodeVersionAllocationDecider extends AllocationDecider {
 

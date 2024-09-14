@@ -277,6 +277,9 @@ public class GatewayService extends AbstractLifecycleComponent implements Cluste
         }
     }
 
+    /**
+     * 通过GatewayRecovery恢复的Node加入集群
+     */
     class GatewayRecoveryListener implements Gateway.GatewayStateRecoveredListener {
 
         @Override

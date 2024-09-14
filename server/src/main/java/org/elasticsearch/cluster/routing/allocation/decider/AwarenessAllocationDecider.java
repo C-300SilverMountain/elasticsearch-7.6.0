@@ -76,6 +76,12 @@ import static java.util.Collections.emptyList;
  * <pre>
  * node.zone: zone1
  * </pre>
+ *
+ * AwarenessAllocationDecider
+ * 定义了Shard Allocation和Remind策略，类似机架感知。为了将主shard和副本shard跨机架/地区分配。
+ * 通过设置系统动态配置”cluster.routing.allocation.awareness.attributes:rack_id”，这里配置的感知类型为rack_id，
+ * 相应的在Node配置上增加node.attr.rack_id:rack_one后,随后创建的index的主分片与副本分片会跨rack_id分配，避免机架网络设备故障导致整个集群不可用。
+ * 相应的”cluster.routing.allocation.awareness.force.zone.values”会强制跨机架分配副本shard，如果分配完主分配，无可用其他机架分配副本分片，则副本分片不允许分配。
  */
 public class AwarenessAllocationDecider extends AllocationDecider {
 

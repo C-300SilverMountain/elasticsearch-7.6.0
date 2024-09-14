@@ -88,6 +88,7 @@ public class MetaDataDeleteIndexService {
 
     /**
      * Delete some indices from the cluster state.
+     * 删除索引操作
      */
     public ClusterState deleteIndices(ClusterState currentState, Set<Index> indices) {
         final MetaData meta = currentState.metaData();

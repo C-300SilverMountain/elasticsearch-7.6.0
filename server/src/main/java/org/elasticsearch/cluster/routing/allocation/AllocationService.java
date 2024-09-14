@@ -63,6 +63,7 @@ import static org.elasticsearch.cluster.routing.UnassignedInfo.INDEX_DELAYED_NOD
  * {@link AllocationService} keeps {@link AllocationDeciders} to choose nodes
  * for shard allocation. This class also manages new nodes joining the cluster
  * and rerouting of shards.
+ * 分配过程在 reroute 的函数中实现: 此函数对外有两种重载，一种是通过接口调用的手工reroute，另一种是内部模块调用的reroute
  */
 public class AllocationService {
 
@@ -165,6 +166,7 @@ public class AllocationService {
      * Applies the failed shards. Note, only assigned ShardRouting instances that exist in the routing table should be
      * provided as parameter. Also applies a list of allocation ids to remove from the in-sync set for shard copies for which there
      * are no routing entries in the routing table.
+     * shard失效状态修改
      *
      * <p>
      * If the same instance of ClusterState is returned, then no change has been made.</p>
@@ -227,6 +229,7 @@ public class AllocationService {
     /**
      * unassigned an shards that are associated with nodes that are no longer part of the cluster, potentially promoting replicas
      * if needed.
+     * Node离开
      */
     public ClusterState disassociateDeadNodes(ClusterState clusterState, boolean reroute, String reason) {
         RoutingNodes routingNodes = getMutableRoutingNodes(clusterState);
@@ -342,6 +345,11 @@ public class AllocationService {
         }
     }
 
+    /**
+     * 处理通过接口调用的手工reroute
+     * 对于内部模块调用，返回值为新产生的集群状态，对于手工执行的reroute 命令，返回命令执行结果。
+     * 执行reloaction命令
+     */
     public CommandsResult reroute(final ClusterState clusterState, AllocationCommands commands, boolean explain, boolean retryFailed) {
         RoutingNodes routingNodes = getMutableRoutingNodes(clusterState);
         // we don't shuffle the unassigned shards here, to try and get as close as possible to
@@ -403,7 +411,9 @@ public class AllocationService {
         }
         return false;
     }
-
+    /*
+    内部模块调用的reroute
+     */
     private void reroute(RoutingAllocation allocation) {
         assert hasDeadNodes(allocation) == false : "dead nodes should be explicitly cleaned up. See disassociateDeadNodes";
         assert AutoExpandReplicas.getAutoExpandReplicaChanges(allocation.metaData(), allocation).isEmpty() :

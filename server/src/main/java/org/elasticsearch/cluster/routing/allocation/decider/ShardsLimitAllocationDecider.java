@@ -50,6 +50,11 @@ import java.util.function.BiPredicate;
  * Note: Reducing the number of shards per node via the index update API can
  * trigger relocation and significant additional load on the clusters nodes.
  * </p>
+ *
+ * ShardsLimitAllocationDecider
+ * 定义了Allocate策略，根据系统的动态配置，index级别的”index.routing.allocation.total_shards_per_node”，表示这个index每个node的总共允许存在多少个shard，默认值是-1表示无穷多个；
+ * 和cluster级别”cluster.routing.allocation.total_shards_per_node”，表示集群范围内每个Node允许存在有多少个shard。默认值是-1表示无穷多个。
+ * 如果目标Node的Shard数超过了配置的上限，则不允许分配Shard到该Node上。注意：index级别的配置会覆盖cluster级别的配置。
  */
 public class ShardsLimitAllocationDecider extends AllocationDecider {
 

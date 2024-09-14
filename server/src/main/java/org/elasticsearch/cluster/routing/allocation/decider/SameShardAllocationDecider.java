@@ -42,6 +42,11 @@ import org.elasticsearch.common.settings.Settings;
  * {@code host}. Allocations of multiple copies of the same shard on the same
  * {@code node} are not allowed independently of this setting.
  * </p>
+ *
+ * SameShardAllocationDecider
+ * 定义了Allocate策略，避免将shard的不同类型(主shard，副本shard)分配到同一个node上，先检查已分配shard的NodeId是否和目标Node相同，相同肯定是不能分配。
+ * 除了检查NodeId，为了避免分配到同一台机器的不同Node，会检查已分配shard的Node ip和hostname是否和目标Node相同，相同的话也是不允许分配的。
+ * https://cloud.tencent.com/developer/article/1361266
  */
 public class SameShardAllocationDecider extends AllocationDecider {
 

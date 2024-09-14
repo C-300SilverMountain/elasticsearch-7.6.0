@@ -640,7 +640,7 @@ public class Node implements Closeable {
             // 数据、索引的恢复服务
             RestoreService restoreService = new RestoreService(clusterService, repositoryService, clusterModule.getAllocationService(),
                 metaDataCreateIndexService, metaDataIndexUpgradeService, clusterService.getClusterSettings());
-            // 重新路由服务
+            // 分片重定位服务
             final RerouteService rerouteService
                 = new BatchedRerouteService(clusterService, clusterModule.getAllocationService()::reroute);
             // 磁盘临界点监控器

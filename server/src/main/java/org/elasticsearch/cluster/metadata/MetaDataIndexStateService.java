@@ -129,6 +129,7 @@ public class MetaDataIndexStateService {
      *
      * Closing indices is a 3 steps process: it first adds a write block to every indices to close, then waits for the operations on shards
      * to be terminated and finally closes the indices by moving their state to CLOSE.
+     * 关闭index操作
      */
     public void closeIndices(final CloseIndexClusterStateUpdateRequest request, final ActionListener<CloseIndexResponse> listener) {
         final Index[] concreteIndices = request.indices();
@@ -499,6 +500,9 @@ public class MetaDataIndexStateService {
             closingResults.values());
     }
 
+    /**
+     * 打开index操作
+     */
     public void openIndex(final OpenIndexClusterStateUpdateRequest request,
                           final ActionListener<OpenIndexClusterStateUpdateResponse> listener) {
         onlyOpenIndex(request, ActionListener.wrap(response -> {

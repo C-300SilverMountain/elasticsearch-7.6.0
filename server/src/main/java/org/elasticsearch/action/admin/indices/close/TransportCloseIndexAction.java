@@ -48,6 +48,13 @@ import java.util.Collections;
 
 /**
  * Close index action
+ *
+ * Shard Allocation 触发条件
+ * 1 创建/删除一个Index； 这里是 关闭索引时 触发
+ * 2 加入/离开一个Node；
+ * 3 手动执行了Reroute命令；
+ * 4 修改了Replica设置；
+ * https://cloud.tencent.com/developer/article/1361266
  */
 public class TransportCloseIndexAction extends TransportMasterNodeAction<CloseIndexRequest, CloseIndexResponse> {
 

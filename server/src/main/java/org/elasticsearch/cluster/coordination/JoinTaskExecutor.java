@@ -95,6 +95,9 @@ public class JoinTaskExecutor implements ClusterStateTaskExecutor<JoinTaskExecut
         this.rerouteService = rerouteService;
     }
 
+    /**
+     * 通过zendiscovery发现的节点加入集群
+     */
     @Override
     public ClusterTasksResult<Task> execute(ClusterState currentState, List<Task> joiningNodes) throws Exception {
         final ClusterTasksResult.Builder<Task> results = ClusterTasksResult.builder();

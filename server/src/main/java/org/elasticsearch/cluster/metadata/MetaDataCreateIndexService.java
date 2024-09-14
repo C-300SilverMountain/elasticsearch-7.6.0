@@ -205,6 +205,8 @@ public class MetaDataCreateIndexService {
      * the timeout, then {@link CreateIndexClusterStateUpdateResponse#isShardsAcknowledged()} will
      * return true, otherwise if the operation timed out, then it will return false.
      *
+     * 创建index请求
+     *
      * @param request the index creation cluster state update request
      * @param listener the listener on which to send the index creation cluster state update response
      */

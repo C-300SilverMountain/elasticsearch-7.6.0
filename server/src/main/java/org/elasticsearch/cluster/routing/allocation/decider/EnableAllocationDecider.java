@@ -57,6 +57,23 @@ import org.elasticsearch.common.settings.Settings;
  *
  * @see Rebalance
  * @see Allocation
+ *
+ * EnableAllocationDecider：
+ * 定义了Allocate策略和Rebalance策略，策略会读取系统动态配置，配置分cluster级别和index级别，如果都配置了，index级别会覆盖cluster级别。
+ * Allocate策略会读取cluster级别”cluster.routing.allocation.enable”配置，默认为all。
+ * 1、all - (默认) 所有类型均允许allocation
+ * 2、primaries - 只允许allocation主分片.
+ * 3、new_primaries - 只允许allocation 新创建index的主分片.
+ * 4、none - 所有的分片都不允许allocation
+
+ * 如果当前index配置了“index.routing.allocation.enable”配置，将覆盖cluster级别配置，内容和上面的一样，也分四种类型
+ * Rebalance也会读取cluster级别“cluster.routing.rebalance.enable”配置，默认为all。
+
+ * all - (默认) 所有类型均允许rebalance.
+ * primaries - 只允许rebalance主分片.
+ * replicas - 只允许rebalance 副本分片.
+ * none - 所有的分片都不允许rebalance.
+ * https://cloud.tencent.com/developer/article/1361266
  */
 public class EnableAllocationDecider extends AllocationDecider {
 

@@ -47,6 +47,12 @@ import java.util.Set;
 
 /**
  * Delete index action.
+ * Shard Allocation 触发条件
+ * 1 创建/删除一个Index； 删除索引时触发
+ * 2 加入/离开一个Node；
+ * 3 手动执行了Reroute命令；
+ * 4 修改了Replica设置；
+ * https://cloud.tencent.com/developer/article/1361266
  */
 public class TransportDeleteIndexAction extends TransportMasterNodeAction<DeleteIndexRequest, AcknowledgedResponse> {
 

@@ -69,6 +69,13 @@ import static org.elasticsearch.cluster.routing.allocation.DiskThresholdSettings
  *
  * <code>cluster.routing.allocation.disk.threshold_enabled</code> is used to
  * enable or disable this decider. It defaults to true (enabled).
+ *
+ * DiskThresholdDecider
+ * 定义了Allocate策略，Remind策略。策略根据Node的磁盘剩余量来决定是否分配到该Node，以及检查Shard是否可以继续停留在当前Node上，
+ * 会检查系统的动态配置”cluster.routing.allocation.disk.threshold_enabled”默认“true”，如果为false，该策略允许分配分片。
+ * 策略里还会用到另外两项系统动态配置：
+ * 1、“cluster.routing.allocation.disk.watermark.low”，默认值“85%”，达到这个值后，新索引的分片不会分配到这个Node上，也可以设置具体的byte数大小；
+ * 2、“cluster.routing.allocation.disk.watermark.high”，默认值“90%”，达到这个值后，会触发已分配到该节点的Shardrebalance到其他Node上，配置项可以设置成具体的byte数大小。
  */
 public class DiskThresholdDecider extends AllocationDecider {
 

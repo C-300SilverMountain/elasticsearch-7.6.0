@@ -44,7 +44,14 @@ import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
 
 import java.io.IOException;
-
+/*
+ * Shard Allocation 触发条件
+ * 1 创建/删除一个Index；
+ * 2 加入/离开一个Node；
+ * 3 手动执行了Reroute命令；
+ * 4 修改了Replica设置； 这里是 更新集群配置时 触发
+ * https://cloud.tencent.com/developer/article/1361266
+ */
 public class TransportClusterUpdateSettingsAction extends
     TransportMasterNodeAction<ClusterUpdateSettingsRequest, ClusterUpdateSettingsResponse> {
 

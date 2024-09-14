@@ -56,7 +56,14 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
+/*
+ * Shard Allocation 触发条件
+ * 1 创建/删除一个Index；
+ * 2 加入/离开一个Node；
+ * 3 手动执行了Reroute命令； 这里是 执行admin/reroute命令时 触发
+ * 4 修改了Replica设置；
+ * https://cloud.tencent.com/developer/article/1361266
+ */
 public class TransportClusterRerouteAction extends TransportMasterNodeAction<ClusterRerouteRequest, ClusterRerouteResponse> {
 
     private static final Logger logger = LogManager.getLogger(TransportClusterRerouteAction.class);

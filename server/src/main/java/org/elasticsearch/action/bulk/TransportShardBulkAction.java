@@ -153,6 +153,7 @@ public class TransportShardBulkAction extends TransportWriteAction<BulkShardRequ
 
             @Override
             protected void doRun() throws Exception {
+                // 1、 重点在executeBulkItemRequest，其他方式可忽略
                 while (context.hasMoreOperationsToExecute()) {
                     if (executeBulkItemRequest(context, updateHelper, nowInMillisSupplier, mappingUpdater, waitForMappingUpdate,
                         ActionListener.wrap(v -> executor.execute(this), this::onRejection)) == false) {
@@ -163,6 +164,7 @@ public class TransportShardBulkAction extends TransportWriteAction<BulkShardRequ
                     assert context.isInitial(); // either completed and moved to next or reset
                 }
                 // We're done, there's no more operations to execute so we resolve the wrapped listener
+                // 执行成功后，触发回调
                 finishRequest();
             }
 

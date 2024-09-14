@@ -211,6 +211,7 @@ public class ClusterModule extends AbstractModule {
     public static Collection<AllocationDecider> createAllocationDeciders(Settings settings, ClusterSettings clusterSettings,
                                                                          List<ClusterPlugin> clusterPlugins) {
         // collect deciders by class so that we can detect duplicates
+        //https://cloud.tencent.com/developer/article/1361266
         Map<Class, AllocationDecider> deciders = new LinkedHashMap<>();
         addAllocationDecider(deciders, new MaxRetryAllocationDecider());
         addAllocationDecider(deciders, new ResizeAllocationDecider());
@@ -228,6 +229,9 @@ public class ClusterModule extends AbstractModule {
         addAllocationDecider(deciders, new ThrottlingAllocationDecider(settings, clusterSettings));
         addAllocationDecider(deciders, new ShardsLimitAllocationDecider(settings, clusterSettings));
         addAllocationDecider(deciders, new AwarenessAllocationDecider(settings, clusterSettings));
+
+        //所有的Allocation由上面14个策略组成，通过全部的策略该Node才是一个符合策略条件的目标Node，允许进行后面的分片分配过程。
+        //Shard Allocation，Shard Move，Shard Rebalance会利用这些Decision，再决定是否进行分片分配，分片迁移，分片均衡等操作；
 
         clusterPlugins.stream()
             .flatMap(p -> p.createAllocationDeciders(settings, clusterSettings).stream())

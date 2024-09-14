@@ -29,6 +29,11 @@ import org.elasticsearch.cluster.routing.allocation.RoutingAllocation;
 /**
  * This {@link org.elasticsearch.cluster.routing.allocation.decider.AllocationDecider} prevents shards that
  * are currently been snapshotted to be moved to other nodes.
+
+ * SnapshotInProgressAllocationDecider
+ * 定义了Allocate策略，根据系统动态配置”cluster.routing.allocation.snapshot.relocation_enabled”，决定snapshot期间是否允许allocation，
+ * 由于snapshot只发生在主分片，所以只会限制主分片的allocation。
+ * https://cloud.tencent.com/developer/article/1361266
  */
 public class SnapshotInProgressAllocationDecider extends AllocationDecider {
 

@@ -932,7 +932,7 @@ public class InternalEngine extends Engine {
                     indexResult = plan.earlyResultOnPreFlightError.get();
                     assert indexResult.getResultType() == Result.Type.FAILURE : indexResult.getResultType();
                 } else {
-                    // 生成 SeqNo
+                    // 1.1 生成 SeqNo
                     // generate or register sequence number
                     if (index.origin() == Operation.Origin.PRIMARY) {
                         index = new Index(index.uid(), index.parsedDoc(), generateSeqNoForOperationOnPrimary(index), index.primaryTerm(),
@@ -948,7 +948,7 @@ public class InternalEngine extends Engine {
                     }
 
                     assert index.seqNo() >= 0 : "ops should have an assigned seq no.; origin: " + index.origin();
-                    // plan用来生成version = plan.versionForIndexing
+                    // 1.2 plan用来生成version = plan.versionForIndexing
                     if (plan.indexIntoLucene || plan.addStaleOpToLucene) {
                         indexResult = indexIntoLucene(index, plan);
                     } else {
@@ -1055,6 +1055,7 @@ public class InternalEngine extends Engine {
             plan = IndexingStrategy.optimizedAppendOnly(1L);
         } else {
             versionMap.enforceSafeAccess();
+            // 1、 读取文档当前版本号，用于根据当前版本号生成新的版本号
             // resolves incoming version
             final VersionValue versionValue =
                 resolveDocVersion(index, index.getIfSeqNo() != SequenceNumbers.UNASSIGNED_SEQ_NO);

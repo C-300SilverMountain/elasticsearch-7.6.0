@@ -46,6 +46,16 @@ public class AllocationDeciders extends AllocationDecider {
         this.allocations = Collections.unmodifiableCollection(allocations);
     }
 
+    //用于汇总一组决策者的决定来确定最终决定。
+    //其中判断集群是否可以进行rebalance的决策者们如下：
+
+    //EnableAllocationDecider
+    //针对index.routing.rebalance.enable参数
+    //ClusterRebalanceAllocationDecider
+    //针对cluster.routing.allocation.allow_rebalance参数
+    //ConcurrentRebalanceAllocationDecider
+    //针对cluster.routing.allocation.cluster_concurrent_rebalance参数
+
     @Override
     public Decision canRebalance(ShardRouting shardRouting, RoutingAllocation allocation) {
         Decision.Multi ret = new Decision.Multi();

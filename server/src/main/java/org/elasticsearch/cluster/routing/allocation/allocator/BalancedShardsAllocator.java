@@ -77,8 +77,46 @@ import static org.elasticsearch.cluster.routing.ShardRoutingState.RELOCATING;
  * <p>
  * These parameters are combined in a {@link WeightFunction} that allows calculation of node weights which
  * are used to re-balance shards based on global as well as per-index factors.
+ * 参考：
+ * https://blog.csdn.net/qq_16164711/article/details/119957760
+ * https://www.cnblogs.com/BlogNetSpace/p/15903696.html
+
+ * 触发机制：https://www.cnblogs.com/memento/p/14494010.html
+ * Allocator种类：
+ * https://www.modb.pro/db/136364
+
+ * Allocators
+ * 尝试寻找最优的节点来分配分片，
+ * Deciders
+ * 则负责判断并决定是否要进行这次分配.
+
+ * 1、Es 中有以下几个类型的 allocator:
+ * Allocator: Allocator 负责为某个特定的 shard 分配目的节点。每个Allocator的主要工作是根据某种逻辑得到一个节点列表，然后调用 deciders 去决策，根据决策结果选择一个目的 node。
+ *             -->ShardsAllocator -> BalancedShardsAllocator
+ * Allocator --
+ *             -->gatewayAllocator -> PrimaryShardAllocator,ReplicaShardAllocator
+ * 可见，Allocators 分为 gatewayAllocator 和 shardsAllocator 两种。
+ * gatewayAllocator 是为了找到现有分片，shardsAllocator 是根据权重策略在集群的各节点间均衡分片分布。
+ * 其中 gatewayAllocator 又分主分片和副分片的 allocator。
+
+ * 2、具体Allocators实现类：
+ * primaryShardAllocator：找到那些拥有某分片最新数据的节点;
+ * replicaShardAllocator：找到磁盘上拥有这个分片数据的节点;
+ * BalancedShardsAllocator：找到拥有最少分片个数的节点。
+
+ * 对于这两大类 Allocator，我的理解是 gatewayAllocator 是为了找到现有shard，shardsAllocator 是为了分配全新 shard。
  */
 public class BalancedShardsAllocator implements ShardsAllocator {
+    /**
+     * Rebalance相关配置参数有以下3+3个：
+     * cluster.routing.rebalance.enable//谁可以进行rebalance
+     * cluster.routing.allocation.allow_rebalance//什么时候可以rebalance
+     * cluster.routing.allocation.cluster_concurrent_rebalance//rebalance的并行度(shards级别)
+
+     * cluster.routing.allocation.balance.shard//allocate每个node上shard总数时计算的权重，提高这个值以后会使node上的shard总数基本趋于一致
+     * cluster.routing.allocation.balance.index//allocate每个index在一个node上shard数时计算的权重,提高这个值会使单个index的shard在集群节点中均衡分布
+     * cluster.routing.allocation.balance.threshold//阈值，提高这个值可以提高集群rebalance的惰性
+     */
 
     private static final Logger logger = LogManager.getLogger(BalancedShardsAllocator.class);
 
@@ -86,11 +124,15 @@ public class BalancedShardsAllocator implements ShardsAllocator {
         Setting.floatSetting("cluster.routing.allocation.balance.index", 0.55f, 0.0f, Property.Dynamic, Property.NodeScope);
     public static final Setting<Float> SHARD_BALANCE_FACTOR_SETTING =
         Setting.floatSetting("cluster.routing.allocation.balance.shard", 0.45f, 0.0f, Property.Dynamic, Property.NodeScope);
+    // IO居高不下，因素一
     public static final Setting<Float> THRESHOLD_SETTING =
         Setting.floatSetting("cluster.routing.allocation.balance.threshold", 1.0f, 0.0f,
             Property.Dynamic, Property.NodeScope);
 
     private volatile WeightFunction weightFunction;
+    // 默认值 = cluster.routing.allocation.balance.threshold，即1.0f
+    // 指定某个索引情况下，该索引涉及到的所有节点，这些节点之间的权重差值，只要小于该域名，就不会发生重定位，否则会重定位，重定位最致命的问题就是：IO居高不下。
+    // 故建议该值设置 = 5，经验值
     private volatile float threshold;
 
     public BalancedShardsAllocator(Settings settings) {
@@ -120,9 +162,12 @@ public class BalancedShardsAllocator implements ShardsAllocator {
             return;
         }
         final Balancer balancer = new Balancer(logger, allocation, weightFunction, threshold);
+        //分配未分配的shards
         balancer.allocateUnassigned();
+        //重分配需要迁移的shards(一些分配规则的限制)
         balancer.moveShards();
-        balancer.balance();
+        //尽量平衡分片在节点的数量
+        balancer.balance();//最终调用balanceByWeights()
     }
 
     @Override
@@ -205,6 +250,7 @@ public class BalancedShardsAllocator implements ShardsAllocator {
      * </ul>
      * <code>weight(node, index) = weight<sub>index</sub>(node, index) + weight<sub>node</sub>(node, index)</code>
      */
+    //WeightFunction权重函数用于均衡计算节点间shards数量平衡和节点间每个索引shards数平衡，看注释：
     public static class WeightFunction {
 
         private final float indexBalance;
@@ -212,12 +258,13 @@ public class BalancedShardsAllocator implements ShardsAllocator {
         private final float theta0;
         private final float theta1;
 
-
+        //默认 0.45 和 0.55 相加等于一
         public WeightFunction(float indexBalance, float shardBalance) {
             float sum = indexBalance + shardBalance;
             if (sum <= 0.0f) {
                 throw new IllegalArgumentException("Balance factors must sum to a value > 0 but was: " + sum);
             }
+            //相加等于一则权重保持参数配置
             theta0 = shardBalance / sum;
             theta1 = indexBalance / sum;
             this.indexBalance = indexBalance;
@@ -236,9 +283,14 @@ public class BalancedShardsAllocator implements ShardsAllocator {
             return weight(balancer, node, index, -1);
         }
 
+        //计算node权重：获取权重计算结果，方式为通过Balancer策略和当前节点和当前索引计算
+        // 简单理解：节点权重 = 节点内所有分片数 * 权重 + 某个索引的分片 * 权重，所以必须指定某个索引，否则没意义
         private float weight(Balancer balancer, ModelNode node, String index, int numAdditionalShards) {
+            //当前节点的shards数 减去 平均的shards数
             final float weightShard = node.numShards() + numAdditionalShards - balancer.avgShardsPerNode();
+            //当前节点当前索引shards数 减去 平均的shards数
             final float weightIndex = node.numShards(index) + numAdditionalShards - balancer.avgShardsPerNode(index);
+            //乘以系数得出结果
             return theta0 * weightShard + theta1 * weightIndex;
         }
     }
@@ -324,7 +376,15 @@ public class BalancedShardsAllocator implements ShardsAllocator {
          * Balances the nodes on the cluster model according to the weight function.
          * The actual balancing is delegated to {@link #balanceByWeights()}
          */
+        //具体的rebalance过程是由BalancedShardsAllocator类中allocate()方法中：调用Balancer的 balanceByWeights() 方法执行。
+        //BalancedShardsAllocator初始化时会根据上文三个参数设置weightFunction(上文参数4，5)和Threshold(上文参数6)。
+
         private void balance() {
+            //首先你想看balance过程得开启日log的trace
+            //issue 14387，集群OK且shards OK才rebalance，否则可能做无用功
+            //调用上文提到的canRebalance()判断是否可以进行
+            //节点只有一个没必要进行
+            //开始进行rebalance
             if (logger.isTraceEnabled()) {
                 logger.trace("Start balancing cluster");
             }
@@ -347,7 +407,7 @@ public class BalancedShardsAllocator implements ShardsAllocator {
                 logger.trace("skipping rebalance as single node only");
                 return;
             }
-            balanceByWeights();
+            balanceByWeights(); //核心方法
         }
 
         /**
@@ -477,15 +537,21 @@ public class BalancedShardsAllocator implements ShardsAllocator {
          * only, or in other words relocations that move the weight delta closer
          * to {@code 0.0}
          */
+        //接下来看balanceByWeights()：核心代码在此
         private void balanceByWeights() {
+            //判断是否要rebanlance的决策者
             final AllocationDeciders deciders = allocation.deciders();
+            //节点信息：包括节点shards数和节点内每个index的shards数
             final ModelNode[] modelNodes = sorter.modelNodes;
+            //节点内每个索引的权重信息
             final float[] weights = sorter.weights;
+            //处理每个索引
             for (String index : buildWeightOrderedIndices()) {
                 IndexMetaData indexMetaData = metaData.index(index);
 
                 // find nodes that have a shard of this index or where shards of this index are allowed to be allocated to,
                 // move these nodes to the front of modelNodes so that we can only balance based on these nodes
+                //找到含有索引shards或者索引shards可以移动过去的节点，并将其移动到ModelNode数组靠前的位置
                 int relevantNodes = 0;
                 for (int i = 0; i < modelNodes.length; i++) {
                     ModelNode modelNode = modelNodes[i];
@@ -498,11 +564,14 @@ public class BalancedShardsAllocator implements ShardsAllocator {
                     }
                 }
 
+                //没有或者只有一个相关节点则跳过
                 if (relevantNodes < 2) {
                     continue;
                 }
 
+                //对与index相关的节点重新计算其权重并排序（注：这里计算是于index相关的节点的权重，然后两两对比其权重，如是小于阈值，则重定位）
                 sorter.reset(index, 0, relevantNodes);
+                //准备对相关节点即前relevantNodes个节点下手
                 int lowIdx = 0;
                 int highIdx = relevantNodes - 1;
                 while (true) {
@@ -510,6 +579,7 @@ public class BalancedShardsAllocator implements ShardsAllocator {
                     final ModelNode maxNode = modelNodes[highIdx];
                     advance_range:
                     if (maxNode.numShards(index) > 0) {
+                        //计算相关节点的最大权重差值，如果低于参数3配置的值则跳过.如大于参数3配置的值，则执行tryRelocateShard（重定位）
                         final float delta = absDelta(weights[lowIdx], weights[highIdx]);
                         if (lessThan(delta, threshold)) {
                             if (lowIdx > 0 && highIdx-1 > 0 // is there a chance for a higher delta?
@@ -541,10 +611,12 @@ public class BalancedShardsAllocator implements ShardsAllocator {
                         /* pass the delta to the replication function to prevent relocations that only swap the weights of the two nodes.
                          * a relocation must bring us closer to the balance if we only achieve the same delta the relocation is useless */
                         if (tryRelocateShard(minNode, maxNode, index, delta)) {
+                            //移动完成后由于节点shards数发生编发，会重新计算他们的权重并重新排序，开启下一轮计算
                             /*
                              * TODO we could be a bit smarter here, we don't need to fully sort necessarily
                              * we could just find the place to insert linearly but the win might be minor
                              * compared to the added complexity
+                             *
                              */
                             weights[lowIdx] = sorter.weight(modelNodes[lowIdx]);
                             weights[highIdx] = sorter.weight(modelNodes[highIdx]);
@@ -554,6 +626,7 @@ public class BalancedShardsAllocator implements ShardsAllocator {
                             continue;
                         }
                     }
+                    //如果本轮没有移动情况，节点权重没有发生改变，则继续处理其他的相关节点
                     if (lowIdx < highIdx - 1) {
                         /* Shrinking the window from MIN to MAX
                          * we can't move from any shard from the min node lets move on to the next node
@@ -568,6 +641,7 @@ public class BalancedShardsAllocator implements ShardsAllocator {
                         highIdx--;
                     } else {
                         /* we are done here, we either can't relocate anymore or we are balanced */
+                        //当前索引已经平衡
                         break;
                     }
                 }
@@ -773,6 +847,7 @@ public class BalancedShardsAllocator implements ShardsAllocator {
              * TODO: We could be smarter here and group the shards by index and then
              * use the sorter to save some iterations.
              */
+            //AllocationDeciders类继承了基类，用于汇总一组决策者的决定来确定最终决定。
             final AllocationDeciders deciders = allocation.deciders();
             final PriorityComparator secondaryComparator = PriorityComparator.getAllocationComparator(allocation);
             final Comparator<ShardRouting> comparator = (o1, o2) -> {
