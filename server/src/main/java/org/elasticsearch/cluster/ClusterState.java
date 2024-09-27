@@ -97,6 +97,139 @@ import static org.elasticsearch.cluster.coordination.Coordinator.ZEN1_BWC_TERM;
  *
  * 通过访问es_http/_cluster/state，可以看到es集群ClusterState详情：
  * https://www.elastic.co/guide/en/elasticsearch/reference/7.6/cluster-stats.html
+ *
+ * 集群状态在ES中封装为ClusterState类。可以通过cluster/state API来获取集群状态。
+ * 参考: https://cloud.tencent.com/developer/article/1860217
+ * curl -X GET "localhost: 9200/_cluster/state"   默认情况下，协调节点在收到这个请求后会把请求路由到主节点执行，确保获取最新的集群状态。
+ *                                                可以通过在请求中添加local=true参数，让接收请求的节点返回本地的集群状态。例如，在排查问题时如果怀疑节点的集群状态是否最新，则可以用这种方式来验证。
+ * 响应信息如下：
+ * {
+ *     "cluster_name" : "elasticsearch",
+ *     "compressed_size_in_bytes" : 1383, //压缩后的字节数
+ *     "version" : 5, //当前集群状态的版本号
+ *     "state_uuid" : "MMXpwaedThCVDIkzn9vpgA",
+ *     "master_node" : " fc6s0S0hRi2yJvMo54qt_g",
+ *     "blocks" : { }, //阻塞信息
+ *     "nodes" : {
+ *         " fc6s0S0hRi2yJvMo54qt_g" : {
+ *             //节点名称、监听地址和端口等信息
+ *         }
+ *     }
+ *     "metadata" : {//元数据
+ *         "cluster_uuid" : "olrqNUxhTC20VVG8KyXJ_w",
+ *         "templates" : {
+ *             //全部模板的具体内容
+ *         }，
+ *         "indices" : {//索引列表
+ *             "website" : {
+ *                 "state" : "open",
+ *                 "settings" : {
+ *                     //setting的具体内容
+ *                 },
+ *                 "mappings": {
+ *                     //mapping的具体内容
+ *                 }
+ *                 "aliases" : [ ],//索引别名
+ *                 "primary_ terms" : {
+ *                     //某个分片被选为主分片的次数，用于区分新旧主分片(具体请参考数据模型一章)
+ *                     "0" : 4,
+ *                     "1" : 5
+ *                 }
+ *                 "in_sync_allocations" : {
+ *                     //同步分片列表，代表某个分片中拥有最新数据的分片列表
+ *                     "1":[
+ *                         "jalbPWjJST2bDPCU008ScQ" //这个值是allocation_id
+ *                     ],
+ *                     "0":[
+ *                         "1EjTXE1CSZ-C1DYlEFRXtw"
+ *                     ]
+ *                 }
+ *             }
+ *         },
+ *         "repositories" : {
+ *             //为存储快照而创建的仓库列表
+ *         }，
+ *         "index-graveyard" : {
+ *             //索引墓碑。记录已删除的索引，并保存一段时间。索引删除是主节点通过下发
+ *             //集群状态来执行的
+ *             //各节点处理集群状态是异步的过程。例如，索引分片分布在5个节点上，删除
+ *             //索引期间，某个节点是“down”掉的，没有执行删除逻辑
+ *             //当这个节点恢复的时候，其存储的已删除的索引会被当作孤立资源加入集群,
+ *             //索引死而复活。墓碑的作用就是防止发生这种情况
+ *             "tombstones" : [
+ *                 //已删除的索引列表
+ *             ]
+ *         }
+ *     },
+ *     "routing_table" : { //内容路由表。存储某个分片位于哪个节点的信息。通过分片
+ *         //找到节点
+ *         "indices" : { //全部索引列表
+ *             "website" : {//索引名称
+ *                 "shards" : {//该索引的全部分片列表 .
+ *                     "1" : [//分片 1
+ *                         {
+ *                             "state" : "STARTED",    //分片可能的状态: UNASSIGNED、INITIALIZING、
+ *                                                     //STARTED、RELOCATING
+ *                              "primary" : true， //是否是主分片
+ *                              "node" : "fc6s0S0hRi2yJvMo54qt_g", //所在分片
+ *                              "relocating_node" : null, //正在“relocation”到哪个节点
+ *                              "shard" : 1, // 分片1
+ *                              "index" : "website", // 索引名
+ *                              "allocation_ id" : {
+ *                                 "id" : "jalbPWj JST2bDPCUO08ScQ" // 分片唯一的allocation_id配合in_sync_allocations使用
+ *                              }
+ *                          }
+ *                      ]
+ *                  }
+ *              }
+ *          }
+ *      },
+ *      "routing nodes" : {//存储某个节点存储了哪些分片的信息。通过节点找到分片
+ *         "unassigned" : [//未分配的分片列表
+ *                 {//某个分片的信息
+ *                     "state" : "UNASSIGNED",
+ *                     "primary" : true,
+ *                     "node" : null,
+ *                     "relocating_ node" : null,
+ *                     "shard" : 0，
+ *                     "index" : "website",
+ *                     " recovery_ source" : {
+ *                     "type" : "EXISTING_ STORE"
+ *                 },
+ *                 "unassigned_ info" : {//未 分配的具体信息
+ *                     "reason" : "CLUSTER RECOVERED",
+ *                     "at" : "2018-05-27T08:17:56.381Z",
+ *                     "delayed" : false,
+ *                     "allocation status" : "no_ valid_ shard copy"
+ *                 }
+ *             }
+ *         ],
+ *         "nodes" : {//节点列表
+ *         "fc6s0S0hRi2yJvMo54qt_g" : [//某个节点 上的分片列表
+ *             {
+ *                 "state" : "STARTED"， //分片信息， 同上
+ *                 "primary" : true,
+ *                 "node" : " fc6s0S0hRi2yJvMo54qt_g",
+ *                 "relocating_ node" : null,
+ *                 "shard" : 1,
+ *                 "index" : "website",
+ *                 "allocation_id" : {
+ *                     "id" : "jalbPWjJST2bDPCU008ScQ"
+ *                 },
+ *                 "snapshot_deletions" : {//请 求删除快照的信息
+ *                     "snapshot_deletions" :[ ]
+ *                 },
+ *                 "snapshots" : {//请求创 建快照的信息
+ *                     "snapshots" : [ ]
+ *                 },
+ *                 "restore" : {//请求恢 复快照的信息
+ *                     "snapshots" : [ ]
+ *                 }
+ *             }
+ *         }
+ *     }
+ * }
+ * 由于集群状态需要频繁下发，而且内容较多，从ES 2.0版本开始，主节点发布集群信息时支持在相邻的两个版本号之间只发送增量内容。
  */
 public class ClusterState implements ToXContentFragment, Diffable<ClusterState> {
 

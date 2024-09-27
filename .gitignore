@@ -49,3 +49,6 @@ testfixtures_shared/
 
 # These are generated from .ci/jobs.t
 .ci/jobs/
+.idea
+/httpRequests/*
+/home/plugins/*

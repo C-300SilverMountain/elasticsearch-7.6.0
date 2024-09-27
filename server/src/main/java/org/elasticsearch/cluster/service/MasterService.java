@@ -70,6 +70,11 @@ import java.util.stream.Collectors;
 
 import static org.elasticsearch.common.util.concurrent.EsExecutors.daemonThreadFactory;
 
+/**
+ *  MasterService 和ClusterApplierService 分别负责运行任务和应用任务产生的集群状态。
+ *  只有主节点会执行这个类中的方法。也就是说，只有主节点会提交集群任务到内部的队列，并运行队列中的任务。.
+ *  参考：https://cloud.tencent.com/developer/article/1860217
+ */
 public class MasterService extends AbstractLifecycleComponent {
     private static final Logger logger = LogManager.getLogger(MasterService.class);
 
@@ -79,17 +84,32 @@ public class MasterService extends AbstractLifecycleComponent {
 
     static final String MASTER_UPDATE_THREAD_NAME = "masterService#updateTask";
 
+    /**
+     * 发布集群任务的模块
+     */
     ClusterStatePublisher clusterStatePublisher;
 
     private final String nodeName;
 
+    /**
+     * 存储集群状态
+     */
     private java.util.function.Supplier<ClusterState> clusterStateSupplier;
-
+    /**
+     * 集群任务慢执行的检测门限
+     */
     private volatile TimeValue slowTaskLoggingThreshold;
 
     protected final ThreadPool threadPool;
-
+    /**
+     * 执行集群任务的线程池
+     * 执行集群任务的线程池为单个线程的线程池。因此，集群任务被串行地执行。
+     * 线程池类型为PrioritizedEsThreadPoolExecutor，支持优先级。其初始化在MasterService#doStart 方法中:
+     */
     private volatile PrioritizedEsThreadPoolExecutor threadPoolExecutor;
+    /**
+     * 管理、执行提交的任务。通过submitStateUpdateTask 方法提交的任务最终调用内部类Batcher的提交方法
+     */
     private volatile Batcher taskBatcher;
 
     public MasterService(Settings settings, ClusterSettings clusterSettings, ThreadPool threadPool) {
@@ -373,6 +393,7 @@ public class MasterService extends AbstractLifecycleComponent {
     }
 
     /**
+     * 提交集群任务
      * Submits a cluster state update task; submitted updates will be
      * batched across the same instance of executor. The exact batching
      * semantics depend on the underlying implementation but a rough
@@ -467,6 +488,7 @@ public class MasterService extends AbstractLifecycleComponent {
 
     /**
      * Returns the tasks that are pending.
+     * 返回待执行的任务列表
      */
     public List<PendingClusterTask> pendingTasks() {
         return Arrays.stream(threadPoolExecutor.getPending()).map(pending -> {
@@ -480,6 +502,7 @@ public class MasterService extends AbstractLifecycleComponent {
 
     /**
      * Returns the number of currently pending tasks.
+     * 返回待执行的任务数量
      */
     public int numberOfPendingTasks() {
         return threadPoolExecutor.getNumberOfPendingTasks();
@@ -790,6 +813,7 @@ public class MasterService extends AbstractLifecycleComponent {
     public <T> void submitStateUpdateTasks(final String source,
                                            final Map<T, ClusterStateTaskListener> tasks, final ClusterStateTaskConfig config,
                                            final ClusterStateTaskExecutor<T> executor) {
+        // 集群任务执行完毕，可能会产生新的集群状态。如果产生新的集群状态，则主节点会把它广播到其他节点。
         if (!lifecycle.started()) {
             return;
         }

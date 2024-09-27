@@ -89,6 +89,9 @@ import java.util.function.Supplier;
 
 /**
  * Configures classes and services that affect the entire cluster.
+ * 参考：https://cloud.tencent.com/developer/article/1860217
+ * Cluster模块封装了在集群层面要执行的任务。例如，把分片分配给节点属于集群层面的工作，在节点间迁移分片以保持数据均衡，集群健康、集群级元信息管理，以及节点管理都属于集群层面工作。
+ * 本章重点论述集群任务的执行，以及集群状态的下发过程。分片分配和节点管理等单独讨论更合适一-些。
  */
 public class ClusterModule extends AbstractModule {
 

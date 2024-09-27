@@ -70,6 +70,11 @@ import java.util.stream.Stream;
 
 import static org.elasticsearch.common.util.concurrent.EsExecutors.daemonThreadFactory;
 
+/**
+ * ClusterApplierService类负责管理需要对集群任务进行处理的模块(Applier)和监听器(Listener)，以及通知各个Applier应用集群状态。
+ * 其对外提供接收集群状态的接口，当传输模块收到集群状态时，调用这个接口将集群状态传递过来，内部维护一个线程池用于应用集群状态。对外提供的主要接口如下表所示。
+ * 参考：https://cloud.tencent.com/developer/article/1860217
+ */
 public class ClusterApplierService extends AbstractLifecycleComponent implements ClusterApplier {
     private static final Logger logger = LogManager.getLogger(ClusterApplierService.class);
 
@@ -83,7 +88,8 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
     protected final ThreadPool threadPool;
 
     private volatile TimeValue slowTaskLoggingThreshold;
-
+    //应用集群任务的线程池也是单个线程的线程池，集群任务被串行地应用。
+    // 与运行集群任务时相同，该线程池类型为PrioritizedEsThreadPoolExecutor， 其初始化在ClusterApplierService#doStart方法中:
     private volatile PrioritizedEsThreadPoolExecutor threadPoolExecutor;
 
     /**
@@ -94,7 +100,9 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
     private final Collection<ClusterStateApplier> lowPriorityStateAppliers = new CopyOnWriteArrayList<>();
     private final Iterable<ClusterStateApplier> clusterStateAppliers = Iterables.concat(highPriorityStateAppliers,
         normalPriorityStateAppliers, lowPriorityStateAppliers);
-
+    /**
+     * 保存集群状态监听器
+     */
     private final Collection<ClusterStateListener> clusterStateListeners = new CopyOnWriteArrayList<>();
     private final Collection<TimeoutClusterStateListener> timeoutClusterStateListeners =
         Collections.newSetFromMap(new ConcurrentHashMap<>());
@@ -102,7 +110,9 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
     private final LocalNodeMasterListeners localNodeMasterListeners;
 
     private final Queue<NotifyTimeout> onGoingTimeouts = ConcurrentCollections.newQueue();
-
+    /**
+     * 保存最后的集群状态
+     */
     private final AtomicReference<ClusterState> state; // last applied state
 
     private final String nodeName;
@@ -199,6 +209,7 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
     }
 
     /**
+     * 返回集群状态
      * The current cluster state.
      * Should be renamed to appliedClusterState
      */
@@ -225,6 +236,7 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
 
     /**
      * Adds a applier of updated cluster states.
+     * 保存要通知的集群状态应用处理器
      */
     public void addStateApplier(ClusterStateApplier applier) {
         normalPriorityStateAppliers.add(applier);
@@ -240,6 +252,7 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
     }
 
     /**
+     * 添加一个集群状态监听器
      * Add a listener for updated cluster states
      */
     public void addListener(ClusterStateListener listener) {
@@ -247,6 +260,7 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
     }
 
     /**
+     * 删除一个集群状态监听器
      * Removes a listener for updated cluster states.
      */
     public void removeListener(ClusterStateListener listener) {
@@ -327,6 +341,12 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
         return threadPool;
     }
 
+    /**
+     * 收到新的集群状态
+     * @param source information where the cluster state came from
+     * @param clusterStateSupplier the cluster state supplier which provides the latest cluster state to apply
+     * @param listener callback that is invoked after cluster state is applied
+     */
     @Override
     public void onNewClusterState(final String source, final Supplier<ClusterState> clusterStateSupplier,
                                   final ClusterApplyListener listener) {
@@ -341,6 +361,13 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
         submitStateUpdateTask(source, ClusterStateTaskConfig.build(Priority.HIGH), applyFunction, listener);
     }
 
+    /**
+     * 在新的线程池应用集群状态
+     * @param source
+     * @param config
+     * @param executor
+     * @param listener
+     */
     private void submitStateUpdateTask(final String source, final ClusterStateTaskConfig config,
                                        final Function<ClusterState, ClusterState> executor,
                                        final ClusterApplyListener listener) {
@@ -482,6 +509,33 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
         }
 
         logger.debug("apply cluster state with version {}", newClusterState.version());
+        // 主节点和从节点都会应用集群状态，因此都会执行这个类中的方法。
+        // 1、如果某个模块需要处理集群状态，则调用addStateApplier方法添加一一个处理器。
+        // 2、如果想监听集群状态的变化，则通过addListener添加一一个监听器。
+        // Applier负责将集群状态应用到组件内部，对Applier的调用在集群状态可见(ClusterService#state 获取到的)之前，对Listener的通知在新的集群状态可见之后。
+        //实现一个Applier
+        //如果模块需要对集群状态进行处理，则需要从接口类ClusterStateApplier实现，实现其中的applyClusterState方法，例如:
+        //public class GatewayMetaState extends AbstractComponent implements ClusterStateApplier {
+        //    public void applyClusterState (Clus terChangedEvent event) {
+        //        //实现对集群状态的处理
+        //    }
+        //}
+        //类似的, SnapshotsService、RestoreService、IndicesClusterStateService都从ClusterStateApplie接口实现。
+        //实现ClusterStateApplier的子类后，在子类中调用addStateApplier将类的实例添加到Applie列表。当应用集群状态时，会遍历这个列表通知各个模块执行应用。
+        //clusterService.addStateApplier (this);
+
+        //实现一个Listene
+        //大部分的组件只需要感知产生了新的集群状态，针对新的集群状态执行若干操作。
+        // 如果模块需要在产生新的集群状态时被通知，则需要实现接口类ClusterStateListener，实现其中的clusterChanged方法。例如:
+        //public class GatewayService extends AbstractLifecycleComponent implements ClusterStateListener {
+        //    public void clusterChanged (final Clus terChangedEvent event) {
+        //        //处理集群状态变化
+        //    }
+        //}
+        //类似的，实现ClusterStateListener 接口的类还有IndicesStore， DanglingIndicesState 、MetaDataUpdateSettingsService和SnapshotShardsService 等。
+        //实现ClusterStateListener 的子类后，在子类中调用addListener将类的实例添加到Listene列表。当集群状态应用完毕，会遍历这个列表通知各个模块集群状态已发生变化。
+        //clusterService.addListener(this);
+        //参考：https://cloud.tencent.com/developer/article/1860217
         callClusterStateAppliers(clusterChangedEvent, stopWatch);
 
         nodeConnectionsService.disconnectFromNodesExcept(newClusterState.nodes());
