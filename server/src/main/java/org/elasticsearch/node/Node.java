@@ -938,12 +938,13 @@ public class Node implements Closeable {
 
         clusterService.addStateApplier(transportService.getTaskManager());
         // start after transport service so the local disco is known
+        //此处并没开始执行选主流程，仅初始化，如保证唯一线程执行选主
         discovery.start(); // start before cluster service so that it can set initial state on ClusterApplierService
         clusterService.start();
         assert clusterService.localNode().equals(localNodeFactory.getNode())
             : "clusterService has a different local node than the factory provided";
         transportService.acceptIncomingRequests(); //说明TransportService已准备好，可接收请求。
-        // 选举流程：
+        // 执行选主节点流程：
         // 默认调用Coordinator的startInitialJoin()方法开始加入集群并准备进行参与选举。
         // https://blog.csdn.net/weixin_40318210/article/details/81515809
         // https://blog.csdn.net/kissfox220/article/details/119956861

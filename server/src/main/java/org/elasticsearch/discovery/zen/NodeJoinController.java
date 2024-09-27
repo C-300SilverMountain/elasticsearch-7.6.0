@@ -212,9 +212,10 @@ public class NodeJoinController {
                     electionContext.requiredMasterJoins);
             }
             // 当前节点成为“主节点”，并发布（广播）集群状态 & 定期发送ping到集群中所有其他节点
-            //依赖ZenDiscovery.publish广播集群状态，其实就是通知其他节点，本节点已成为“大佬”
+            // 依赖ZenDiscovery.publish广播集群状态，其实就是通知其他节点，本节点已成为“大佬”
             electionContext.closeAndBecomeMaster();
-            //清空选举容器，防止后续再次选举的时候导致累加
+            // 清空选举容器，防止后续再次选举的时候导致累加
+            // 变空后，failContextIfNeeded就不会执行，也就不会再发起一次选举
             electionContext = null; // clear this out so future joins won't be accumulated
         }
     }
