@@ -150,6 +150,8 @@ http://localhost:9200/
 
 配置gradle：
 
-> 把这两个选项从Gradle改成IntelliJ IDEA
+> gradle home: G:/openSource/github/elasticsearch-7.6.0/gradle
+
+> 把这两个选项(Build and run using | Run tests using)从Gradle改成IntelliJ IDEA
 
 > 选中Add dependencies with provided scope to classpath

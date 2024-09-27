@@ -162,11 +162,11 @@ public class BalancedShardsAllocator implements ShardsAllocator {
             return;
         }
         final Balancer balancer = new Balancer(logger, allocation, weightFunction, threshold);
-        //分配未分配的shards
+        //分配未分配的shards：根据权重算法和decider决定把shard分配到哪个节点。同样将决策后的分配信息更新到集群状态，由Master广播下去。
         balancer.allocateUnassigned();
-        //重分配需要迁移的shards(一些分配规则的限制)
+        //重分配需要迁移的shards(一些分配规则的限制)：对状态为started的分片根据decider来判断是否需要“move"，move过程中此shard的状态被设置为RELOCATING，在目标上创建这个shard时状态为INITIALIZING，同时版本号会加1。
         balancer.moveShards();
-        //尽量平衡分片在节点的数量
+        //尽量平衡分片在节点的数量：根据权重函数平衡集群模型上的节点。
         balancer.balance();//最终调用balanceByWeights()
     }
 
