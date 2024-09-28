@@ -57,30 +57,46 @@ public abstract class TaskBatcher {
         if (tasks.isEmpty()) {
             return;
         }
+        //batchingKey为ClusterStateTaskExecuto
+        //BatchedTask: :getTask返回完整的task <T extends ClusterStateTaskConfig
+        //& ClusterStateTaskExecutor<T> & ClusterStateTas kListener>
+        //例如，ClusterStateUpdateTask 对象
         final BatchedTask firstTask = tasks.get(0);
+        //如果一次提交多个任务，则必须有相同的batchingKey，这些任务将被批量执行: 这里的批量执行指的是：仅执行第一个任务，将此任务的结果赋给其他所有的任务
         assert tasks.stream().allMatch(t -> t.batchingKey == firstTask.batchingKey) :
             "tasks submitted in a batch should share the same batching key: " + tasks;
         // convert to an identity map to check for dups based on task identity
+        //将tasks从List转换为Map, key为task对象，例如，ClusterStateUpdateTask,
+        //如果提交的任务列表存在重复则抛出异常
         final Map<Object, BatchedTask> tasksIdentity = tasks.stream().collect(Collectors.toMap(
             BatchedTask::getTask,
             Function.identity(),
             (a, b) -> { throw new IllegalStateException("cannot add duplicate task: " + a); },
             IdentityHashMap::new));
-
+        //tasksPerBatchingKey在这里添加，在任务执行线程池中,在任务真正开始运行之前“remove"
+        //key为batchingKey,值为tasks
         synchronized (tasksPerBatchingKey) {
+            //如果不存在batchingKey,则添加进去，如果存在则不操作
+            //computeIfAbsent返回新添加的k对应的v，或者已存在的k对应的v
             LinkedHashSet<BatchedTask> existingTasks = tasksPerBatchingKey.computeIfAbsent(firstTask.batchingKey,
                 k -> new LinkedHashSet<>(tasks.size()));
             for (BatchedTask existing : existingTasks) {
                 // check that there won't be two tasks with the same identity for the same batching key
+                //一个batchingKey对应的任务列表不可有相同的identity, identity是任务
+                //本身，例如，ClusterStateUpdateTask 对象
                 BatchedTask duplicateTask = tasksIdentity.get(existing.getTask());
                 if (duplicateTask != null) {
                     throw new IllegalStateException("task [" + duplicateTask.describeTasks(
                         Collections.singletonList(existing)) + "] with source [" + duplicateTask.source + "] is already queued");
                 }
             }
+            //添加到tasksPerBatchingKey的value中。如果提交了相同的任务,
+            //则新任务被追加到这里
             existingTasks.addAll(tasks);
         }
-
+        //交给线程执行
+        //虽然只将传，入任务列表的第-一个任务交个线程池执行，但是任务列表的全部任务被添加到tasksPerBatchingKey中，线程池执行任务时，根据任务的batchingKey从tasksPerBatchingKey中获取任务列表，然后批量执行这个任务列表。
+        //当调用threadExecutor.execute将其交任务给线程池执行时，如果线程池中没有任务运行，则立刻执行这个任务，否则将任务加入线程池的任务队列。
         if (timeout != null) {
             threadExecutor.execute(firstTask, timeout, () -> onTimeoutInternal(tasks, timeout));
         } else {
@@ -127,11 +143,13 @@ public abstract class TaskBatcher {
             final List<BatchedTask> toExecute = new ArrayList<>();
             final Map<String, List<BatchedTask>> processTasksBySource = new HashMap<>();
             synchronized (tasksPerBatchingKey) {
+                //根据batchingKey获取任务列表
                 LinkedHashSet<BatchedTask> pending = tasksPerBatchingKey.remove(updateTask.batchingKey);
                 if (pending != null) {
                     for (BatchedTask task : pending) {
                         if (task.processed.getAndSet(true) == false) {
                             logger.trace("will process {}", task);
+                            //构建要执行的任务列表
                             toExecute.add(task);
                             processTasksBySource.computeIfAbsent(task.source, s -> new ArrayList<>()).add(task);
                         } else {
@@ -147,6 +165,8 @@ public abstract class TaskBatcher {
                     return tasks.isEmpty() ? entry.getKey() : entry.getKey() + "[" + tasks + "]";
                 }).reduce((s1, s2) -> s1 + ", " + s2).orElse("");
 
+                //执行任务列表
+                //这个任务列表接下来被批量执行，由于要执行的内容相同,所以列表中的任务只会执行一个。
                 run(updateTask.batchingKey, toExecute, tasksSummary);
             }
         }

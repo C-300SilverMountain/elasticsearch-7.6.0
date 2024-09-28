@@ -237,7 +237,7 @@ public class MasterService extends AbstractLifecycleComponent {
         }
 
         final long computationStartTime = threadPool.relativeTimeInMillis();
-        // 执行task任务生成 “新的集群状态”
+        // 执行集群task任务 可能生成 “新的集群状态”
         final TaskOutputs taskOutputs = calculateTaskOutputs(taskInputs, previousClusterState);
         taskOutputs.notifyFailedTasks();
         final TimeValue computationTime = getTimeSince(computationStartTime);
@@ -271,6 +271,14 @@ public class MasterService extends AbstractLifecycleComponent {
 
                 logger.debug("publishing cluster state version [{}]", newClusterState.version());
                 // 一旦集群状态发生变化，则广播集群状态
+                //发布集群状态是-一个分布式事务操作，分布式事务需要实现原子性:要么所有参与者都提交事务，要么都取消事务。
+                // ES使用二段提交来实现分布式事务。二段提交可以避免失败回滚，其基本过程是:把信息发下去，但不应用，如果得到多数节点的确认，则再发-一个请求出去要求节点应用。
+                //ES实现二段提交与标准二段提交有一些区别，发布集群状态到参与者的数量并非定义为全部，而是多数节点成功就算成功。多数的定义取决于配置项:
+                //discovery.zen.minimum_master_nodes
+                //两个阶段过程如下。
+                //发布阶段：发布集群状态，等待响应。
+                //提交阶段：收到的响应数量大于minimum master_ nodes 数量，发送commit请求。
+                //参考：https://cloud.tencent.com/developer/article/1860217
                 publish(clusterChangedEvent, taskOutputs, publicationStartTime);
             } catch (Exception e) {
                 handleException(summary, publicationStartTime, newClusterState, e);
@@ -808,7 +816,25 @@ public class MasterService extends AbstractLifecycleComponent {
      *                 that share the same executor will be executed
      *                 batches on this executor
      * @param <T>      the type of the cluster state update task state
-     *
+     * 无论提交单个任务，还是提交多个任务，submitStateUpdateTask 最终通过TaskBatcher#submitTasks来提交任务。
+     *           TaskBatcher#submitTasks其核心工作就是将提交的任务交给线程池执行。但是在此基础上实现了部分场景下的任务去重。
+
+     * 去重的原理是：拥有相同ClusterStateTaskExecutor对象实例的任务只执行一个。
+     * 去重在实现时并没有在线程池队列的列表上操作，而是将任务列表添加到-一个独立于线程池任务队列之外的HashMap中：tasksPerBatchingKey。
+     * 这个HashMap保存的也是待执行的任务。与线程池任务队列不同的是，当提交多个任务时，线程池队列中只保存第一个，而tasksPerBatchingKey以ClusterState TaskExecutor为Key, Value 是提交的整个任务列表。当从线程池任务队列中取出任务准备执行时,先根据任务的ClusterStateTaskExecutor从tasksPerBatchingKey中找到它的任务列表，然后批量执行这个任务列表。所谓批量执行实际上只执行一个，然后对其他任务赋予相同的执行结果。
+
+     * 换句话说，区分重复任务的方式是通过定义的任务本身实现的，即定义具有相同的ClusterStateTaskExecutor对象。
+     * 去重的方式并非将重复的任务从列表中删除，而是在执行完任务后赋予重复任务相同的执行结果。
+
+     * 去重的时机有两方面：
+     * 提交的任务列表本身的去重。
+     * 提交的任务在任务队列tasksPerBatchingKey中已存在，也就是存在尚未执行的相同任务，此时新提交的任务被追加到tasksPerBatchingKey某个k对应的v中。
+
+     * 提交的任务列表本身任务数量大于1个的情况如上一小节所述,只在选主的流程中。
+     * 那么，拥有相同ClusterStateTaskExecutor对象的是什么情况?一般情况下，各模块调用clusterService.submitStateUpdateTask提交任务，如果在任务执行之前提交多次，则不认为这些是重复的任务。因为一般每次提交会创建不同的ClusterStateUpdateTask对象，因此也拥有不同的ClusterStateTaskExecutor实例。例如，提交两次相同的创建索引请求，两次请求都会被加入任务队列，然后执行2次。
+     * 只有模块在提交任务时明确使用了相同的ClusterStateTaskExecutor对象，才可能会在执行时去重。
+     * 例如，每次提交shard-started任务时使用创建好的ClusterStateTaskExecutor，因此是同一个ClusterState' TaskExecutor对象实例。
+     * 参考：https://cloud.tencent.com/developer/article/1860217
      */
     public <T> void submitStateUpdateTasks(final String source,
                                            final Map<T, ClusterStateTaskListener> tasks, final ClusterStateTaskConfig config,
@@ -825,6 +851,7 @@ public class MasterService extends AbstractLifecycleComponent {
             List<Batcher.UpdateTask> safeTasks = tasks.entrySet().stream()
                 .map(e -> taskBatcher.new UpdateTask(config.priority(), source, e.getKey(), safe(e.getValue(), supplier), executor))
                 .collect(Collectors.toList());
+            //submitTasks的核心工作就是将待执行任务加入任务队列
             taskBatcher.submitTasks(safeTasks, config.timeout());
         } catch (EsRejectedExecutionException e) {
             // ignore cases where we are shutting down..., there is really nothing interesting

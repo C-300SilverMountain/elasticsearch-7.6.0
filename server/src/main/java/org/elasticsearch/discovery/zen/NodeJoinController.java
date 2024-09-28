@@ -292,7 +292,7 @@ public class NodeJoinController {
                 + getPendingMasterJoinsCount() + " are not enough. needs [" + requiredMasterJoins + "];";
 
             innerClose();
-
+            // 两处的getPendingAsTasks返回的并非执行集群任务线程池的等待队列，而是选主流程中等待加入集群的请求数量。
             Map<JoinTaskExecutor.Task, ClusterStateTaskListener> tasks = getPendingAsTasks("become master");
             final String source = "zen-disco-elected-as-master ([" + tasks.size() + "] nodes joined)";
 
@@ -306,6 +306,7 @@ public class NodeJoinController {
 
         public synchronized void closeAndProcessPending(String reason) {
             innerClose();
+            // 两处的getPendingAsTasks返回的并非执行集群任务线程池的等待队列，而是选主流程中等待加入集群的请求数量。
             Map<JoinTaskExecutor.Task, ClusterStateTaskListener> tasks = getPendingAsTasks(reason);
             final String source = "zen-disco-election-stop [" + reason + "]";
             tasks.put(JoinTaskExecutor.newFinishElectionTask(), electionFinishedListener);

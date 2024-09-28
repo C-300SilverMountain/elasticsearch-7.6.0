@@ -219,6 +219,15 @@ public class ClusterService extends AbstractLifecycleComponent {
      * @param updateTask the full context for the cluster state update
      *                   task
      *
+     * clusterService.submitStateUpdateTask ("allocation dangled indices "， new ClusterStateUpdateTask() {
+     *     //实现要执行的具体任务，任务返回新的集群状态
+     *     public ClusterState execute (ClusterState currentState) {}
+     *     //任务执行失败的回调
+     *     public void onFailure (String source, Exception e) {}
+     *     //集群状态处理完毕的回调，当集群状态已经被全部Appliers和Listeners处理完毕后调用
+     *     public void clusterStateProcessed (String source, ClusterState oldState, ClusterState newState) {}
+     * });
+     *
      */
     public <T extends ClusterStateTaskConfig & ClusterStateTaskExecutor<T> & ClusterStateTaskListener>
         void submitStateUpdateTask(String source, T updateTask) {

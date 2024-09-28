@@ -157,6 +157,7 @@ public class PublishClusterStateAction {
             // sadly this is not water tight as it may that a failed diff based publishing to a node
             // will cause a full serialization based on an older version, which may fail after the
             // change has been committed.
+            //每个集群状态都有自己唯--的版本号,ES在发布集群状态时允许在相邻版本号之间只发送增量内容。在发布之前的准备工作中，先准备发布集群状态的目的节点列表，这个列表只是在已知集群列表中移除了本地节点。
             // 构建序列化后的结果
             // 构造需要发送的状态，如果上次发布集群状态的节点不存在或设置了全量发送配置，则构建全量状态否则构建增量状态然后进行序列化并压缩
             buildDiffAndSerializeStates(clusterChangedEvent.state(), clusterChangedEvent.previousState(),
@@ -200,10 +201,14 @@ public class PublishClusterStateAction {
         final long publishingStartInNanos = System.nanoTime();
 
         // 将集群状态 广播到集群中所有其他节点 （注：只能master才能广播集群状态）
+        //遍历节点，异步发送全量或增量内容，这是二段提交的第一个请求
         for (final DiscoveryNode node : nodesToPublishTo) {
             // try and serialize the cluster state once (or per version), so we don't serialize it
             // per node when we send it over the wire, compress it while we are at it...
             // we don't send full version if node didn't exist in the previous version of cluster state
+
+            //无论发送全量还是增量内容，最终都通过PublishClusterStateAction#sendClusterStateToNode实现发送。
+            //该方法调用transportService异步发送数据,并在请求的响应中判断是否可以进入提交阶段，
             if (sendFullVersion || !previousState.nodes().nodeExists(node)) {
                 //发生全量状态
                 sendFullClusterState(clusterState, serializedStates, node, publishTimeout, sendingController);
@@ -214,12 +219,14 @@ public class PublishClusterStateAction {
         }
         // 阻塞等待提交集群状态：二阶段提交
         // 等待提交，等待第一阶段完成收到足够的响应或达到了超时时间
+        //等待第一个请求收到的响应足够，或者达到commit_timeout 超时时间，如果超时后仍未收到足够数量的响应，则抛出异常，结束发布过程
         sendingController.waitForCommit(discoverySettings.getCommitTimeout());
 
+        //第一阶段已正常完成，等待第二个请求，也就是提交请求完成
         final long commitTime = System.nanoTime() - publishingStartInNanos;
-
         ackListener.onCommit(TimeValue.timeValueNanos(commitTime));
 
+        //等待提交请求收到足够的回复，或者达到publish_ timeout 超时
         try {
             long timeLeftInNanos = Math.max(0, publishTimeout.nanos() - commitTime);
             final BlockingClusterStatePublishResponseHandler publishResponseHandler = sendingController.getPublishResponseHandler();
@@ -247,6 +254,8 @@ public class PublishClusterStateAction {
     private void buildDiffAndSerializeStates(ClusterState clusterState, ClusterState previousState, Set<DiscoveryNode> nodesToPublishTo,
                                              boolean sendFullVersion, Map<Version, BytesReference> serializedStates,
                                              Map<Version, BytesReference> serializedDiffs) {
+        //增量和全量的集群状态都会被序列化并压缩，全量的信息保存在serializedStates中，增量的信息保存在serializedDiffs中。
+        //此时，对于发布过程来说的必备信息:目标节点列表，以及增量或全量数据已准备完毕。进入发布过程：PublishClusterStateAction#innerPublish
         Diff<ClusterState> diff = null;
         for (final DiscoveryNode node : nodesToPublishTo) {
             try {
@@ -302,11 +311,17 @@ public class PublishClusterStateAction {
                                         final TimeValue publishTimeout,
                                         final SendingController sendingController,
                                         final boolean sendDiffs, final Map<Version, BytesReference> serializedStates) {
+        //异常处理. (二阶段不是万能)
+        //什么算发布成功，什么算发布失败?除了准备数据阶段将集群状态序列化，压缩过程产生的I/O异常等内部错误，成功与否取决于二段提交的执行结果。二段提交过程只有一次中止分布式事务的机会，就是在提交阶段，没有收到足够节点ACK (回复正常的响应)。在这种情况下，主节点会重新加入集群。
+        //一旦进入提交阶段，发布过程就进入不可逆状态，如果有节点应用失败了，则整个发布过程不会被认为失败。即使只有少数节点正常应用集群状态，最终也只能接受这种结果。
+        //如果从节点在应用集群状态时中止，例如，节点被“kill", 服务器断电等异常，则节点的集群状态应用失败。当节点重启之后，主动从Master节点获取最新的集群状态并应用。
         try {
             // 重点：以下是二阶段具体实现
-            // es使用二阶段提交来实现状态发布，第一步是push及先将状态数据发送到node节点，但不应用，如果得到超过半数的节点的返回确认，则执行第二步commit及发送提交请求.
+            // es使用二阶段提交来实现状态发布，第一阶段是push及先将状态数据发送到node节点，但不应用，如果得到超过半数的节点的返回确认，则执行第二阶段commit及发送提交请求.
             // 二阶段提交不能保证节点收到commit请求后可以正确应用，也就是它只能保证发了commit请求，但是无法保证单个节点上的状态应用是成功还是失败的
             // 参考：https://blog.csdn.net/GeekerJava/article/details/139866149
+            // https://cloud.tencent.com/developer/article/1860217
+            //sendRequest是第一阶段
             transportService.sendRequest(node, SEND_ACTION_NAME,
                     new BytesTransportRequest(bytes, node.getVersion()),
                     stateRequestOptions,
@@ -320,6 +335,7 @@ public class PublishClusterStateAction {
                                     clusterState.version(), publishTimeout);
                             }
                             // 检查收到的响应是否过半，然后执行commit
+                            //onNodeSendAck属于第二阶段：等待足够的ack后，就发送提交
                             sendingController.onNodeSendAck(node);
                         }
 
@@ -330,6 +346,8 @@ public class PublishClusterStateAction {
                                 sendFullClusterState(clusterState, serializedStates, node, publishTimeout, sendingController);
                             } else {
                                 logger.debug(() -> new ParameterizedMessage("failed to send cluster state to {}", node), exp);
+                                // handleException的处理只是将计数器latch减一，该计数器的总大小为发布过程要通知的节点总数: nodesToPublishTo。
+                                // 该计数器用于判断整个发布过程是否已结束: publishTimeout 计时器超时，或者该计数器为0。
                                 sendingController.onNodeSendFailed(node, exp);
                             }
                         }
@@ -351,6 +369,7 @@ public class PublishClusterStateAction {
 
                         @Override
                         public void handleResponse(TransportResponse.Empty response) {
+                            //记录收到的响应数量，收到足够数量的响应，或publish_timeout 超时后，发布过程结束
                             if (sendingController.getPublishingTimedOut()) {
                                 logger.debug("node {} responded to cluster state commit [{}]", node, clusterState.version());
                             }
