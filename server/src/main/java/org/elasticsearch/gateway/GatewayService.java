@@ -53,6 +53,8 @@ import java.util.function.Function;
  * 其中，GatewayService负责集群元数据选举，GatewayClusterApplier负责集群元数据持久化
  *
  * 参考：https://blog.csdn.net/GeekerJava/article/details/139702581
+ * ClusterStateListener：仅监听集群状态变化
+ * ClusterStateApplier：监听到集群状态变化后，应用此状态
  */
 public class GatewayService extends AbstractLifecycleComponent implements ClusterStateListener {
     private static final Logger logger = LogManager.getLogger(GatewayService.class);

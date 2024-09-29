@@ -70,15 +70,19 @@ public class MetaStateService {
      * @throws IOException if some IOException when loading files occurs or there is no metadata referenced by manifest file.
      */
     public Tuple<Manifest, MetaData> loadFullState() throws IOException {
+        //加载最新的状态文件
+        // 注：MANIFEST_FORMAT 的prefix = manifest-
         final Manifest manifest = MANIFEST_FORMAT.loadLatestState(logger, namedXContentRegistry, nodeEnv.nodeDataPaths());
         if (manifest == null) {
             return loadFullStateBWC();
         }
 
+        //构建元数据
         final MetaData.Builder metaDataBuilder;
         if (manifest.isGlobalGenerationMissing()) {
             metaDataBuilder = MetaData.builder();
         } else {
+            //加载版本号最大的global.st文件内容
             final MetaData globalMetaData = META_DATA_FORMAT.loadGeneration(logger, namedXContentRegistry, manifest.getGlobalGeneration(),
                     nodeEnv.nodeDataPaths());
             if (globalMetaData != null) {
@@ -88,6 +92,7 @@ public class MetaStateService {
             }
         }
 
+        //索引级元数据
         for (Map.Entry<Index, Long> entry : manifest.getIndexGenerations().entrySet()) {
             final Index index = entry.getKey();
             final long generation = entry.getValue();

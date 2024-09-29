@@ -94,6 +94,18 @@ public class GatewayMetaState implements Closeable {
         return getPersistedState().getLastAcceptedState().metaData();
     }
 
+    /**
+     * 加载磁盘元数据
+     * 在node实例的start方法中会调用gatewayMetaState.start方法
+     * 参考：https://blog.csdn.net/GeekerJava/article/details/139702581
+     * @param settings
+     * @param transportService
+     * @param clusterService
+     * @param metaStateService
+     * @param metaDataIndexUpgradeService
+     * @param metaDataUpgrader
+     * @param persistedClusterStateService
+     */
     public void start(Settings settings, TransportService transportService, ClusterService clusterService,
                       MetaStateService metaStateService, MetaDataIndexUpgradeService metaDataIndexUpgradeService,
                       MetaDataUpgrader metaDataUpgrader, PersistedClusterStateService persistedClusterStateService) {
@@ -137,6 +149,7 @@ public class GatewayMetaState implements Closeable {
                 if (onDiskState.empty()) {
                     assert Version.CURRENT.major <= Version.V_7_0_0.major + 1 :
                         "legacy metadata loader is not needed anymore from v9 onwards";
+                    //加载元数据
                     final Tuple<Manifest, MetaData> legacyState = metaStateService.loadFullState();
                     if (legacyState.v1().isEmpty() == false) {
                         metaData = legacyState.v2();
@@ -279,6 +292,8 @@ public class GatewayMetaState implements Closeable {
      * 其中，GatewayService负责集群元数据选举，GatewayClusterApplier负责集群元数据持久化
      *
      * 参考：https://blog.csdn.net/GeekerJava/article/details/139702581
+     * ClusterStateListener：仅监听集群状态变化
+     * ClusterStateApplier：监听到集群状态变化后，应用此状态
      */
     private static class GatewayClusterApplier implements ClusterStateApplier {
 
@@ -296,6 +311,7 @@ public class GatewayMetaState implements Closeable {
                 incrementalClusterStateWriter.setIncrementalWrite(false);
                 return;
             }
+            //监听到集群状态变化，开始应用状态：持久化状态到磁盘
 
             try {
                 // Hack: This is to ensure that non-master-eligible Zen2 nodes always store a current term
@@ -305,6 +321,7 @@ public class GatewayMetaState implements Closeable {
                     incrementalClusterStateWriter.setCurrentTerm(event.state().term());
                 }
 
+                //更新磁盘上的元数据
                 incrementalClusterStateWriter.updateClusterState(event.state());
                 incrementalClusterStateWriter.setIncrementalWrite(true);
             } catch (WriteStateException e) {

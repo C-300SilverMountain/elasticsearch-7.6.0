@@ -95,12 +95,15 @@ public class IncrementalClusterStateWriter {
      * @throws WriteStateException if exception occurs. See also {@link WriteStateException#isDirty()}.
      */
     void updateClusterState(ClusterState newState) throws WriteStateException {
+        //元数据
         MetaData newMetaData = newState.metaData();
 
         final long startTimeMillis = relativeTimeMillisSupplier.getAsLong();
 
         final AtomicClusterStateWriter writer = new AtomicClusterStateWriter(metaStateService, previousManifest);
+        //全局元数据
         long globalStateGeneration = writeGlobalState(writer, newMetaData);
+        //索引级元数据
         Map<Index, Long> indexGenerations = writeIndicesMetadata(writer, newState);
         Manifest manifest = new Manifest(previousManifest.getCurrentTerm(), newState.version(), globalStateGeneration, indexGenerations);
         writeManifest(writer, manifest);

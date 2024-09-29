@@ -348,12 +348,15 @@ public abstract class MetaDataStateFormat<T> {
     private long findMaxGenerationId(final String prefix, Path... locations) throws IOException {
         long maxId = -1;
         for (Path dataLocation : locations) {
+            // _state目录
             final Path resolve = dataLocation.resolve(STATE_DIR_NAME);
             if (Files.exists(resolve)) {
                 try (DirectoryStream<Path> stream = Files.newDirectoryStream(resolve, prefix + "*")) {
                     for (Path stateFile : stream) {
+                        // 找到manifest文件版本号，如manifest-26.st  得到  26
                         final Matcher matcher = stateFilePattern.matcher(stateFile.getFileName().toString());
                         if (matcher.matches()) {
+                            //此类文件，manifest-*.st，可能存在多个，则取版本号最大的
                             final long id = Long.parseLong(matcher.group(1));
                             maxId = Math.max(maxId, id);
                         }
@@ -429,7 +432,9 @@ public abstract class MetaDataStateFormat<T> {
      */
     public Tuple<T, Long> loadLatestStateWithGeneration(Logger logger, NamedXContentRegistry namedXContentRegistry, Path... dataLocations)
             throws IOException {
+        //读取_state目录下版本号最大的文件，如manifest-*.st，版本号最大值，因为可能存在多个类似的文件
         long generation = findMaxGenerationId(prefix, dataLocations);
+        //读取版本号最大的manifest-*.st文件的内容
         T state = loadGeneration(logger, namedXContentRegistry, generation, dataLocations);
 
         if (generation > -1 && state == null) {
@@ -439,6 +444,7 @@ public abstract class MetaDataStateFormat<T> {
                             map(Object::toString).collect(Collectors.joining(", ")) +
                     "], concurrent writes?");
         }
+        //返回文件内容+版本号
         return Tuple.tuple(state, generation);
     }
 
