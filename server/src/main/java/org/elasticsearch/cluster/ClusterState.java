@@ -231,6 +231,9 @@ import static org.elasticsearch.cluster.coordination.Coordinator.ZEN1_BWC_TERM;
  * }
  * 由于集群状态需要频繁下发，而且内容较多，从ES 2.0版本开始，主节点发布集群信息时支持在相邻的两个版本号之间只发送增量内容。
  */
+//特别说明：集群状态信息包含集群元信息+路由信息（靠节点上报后，动态生成）
+    // https://blog.csdn.net/GeekerJava/article/details/139702581
+    // ClusterState集群状态的管理在 gatewayService负责，如持久化、从磁盘加载集群状态
 public class ClusterState implements ToXContentFragment, Diffable<ClusterState> {
 
     public static final ClusterState EMPTY_STATE = builder(ClusterName.CLUSTER_NAME_SETTING.getDefault(Settings.EMPTY)).build();
@@ -307,7 +310,7 @@ public class ClusterState implements ToXContentFragment, Diffable<ClusterState> 
     private final RoutingTable routingTable;
     //节点信息
     private final DiscoveryNodes nodes;
-    //元数据
+    //集群元数据
     private final MetaData metaData;
 
     private final ClusterBlocks blocks;

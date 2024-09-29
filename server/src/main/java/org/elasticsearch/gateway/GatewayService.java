@@ -47,6 +47,13 @@ import org.elasticsearch.threadpool.ThreadPool;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
+/**
+ * 状态信息的管理在gatewayService中，它实现了ClusterStateListener接口，当选择完主节点后会发布一个集群状态task，触发回调方法clusterChanged
+ * 选出主节点后，会调用所有ClusterStateListener，包括GatewayService.clusterChanged
+ * 其中，GatewayService负责集群元数据选举，GatewayClusterApplier负责集群元数据持久化
+ *
+ * 参考：https://blog.csdn.net/GeekerJava/article/details/139702581
+ */
 public class GatewayService extends AbstractLifecycleComponent implements ClusterStateListener {
     private static final Logger logger = LogManager.getLogger(GatewayService.class);
 

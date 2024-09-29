@@ -536,6 +536,7 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
         //实现ClusterStateListener 的子类后，在子类中调用addListener将类的实例添加到Listene列表。当集群状态应用完毕，会遍历这个列表通知各个模块集群状态已发生变化。
         //clusterService.addListener(this);
         //参考：https://cloud.tencent.com/developer/article/1860217
+        //通知所有Appliers
         callClusterStateAppliers(clusterChangedEvent, stopWatch);
 
         nodeConnectionsService.disconnectFromNodesExcept(newClusterState.nodes());
@@ -547,8 +548,9 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
             + " on " + newClusterState.nodes().getLocalNode();
 
         logger.debug("set locally applied cluster state to version {}", newClusterState.version());
+        // 最新集群状态
         state.set(newClusterState);
-
+        //通知所有Listeners
         callClusterStateListeners(clusterChangedEvent, stopWatch);
     }
 
@@ -565,19 +567,23 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
     }
 
     private void callClusterStateAppliers(ClusterChangedEvent clusterChangedEvent, StopWatch stopWatch) {
+        //遍历全部的Applier,依次调用各模块对集群状态的处理
         clusterStateAppliers.forEach(applier -> {
             logger.trace("calling [{}] with change to version [{}]", applier, clusterChangedEvent.state().version());
             try (Releasable ignored = stopWatch.timing("running applier [" + applier + "]")) {
+                //调用各模块实现的applyClusterState
                 applier.applyClusterState(clusterChangedEvent);
             }
         });
     }
 
     private void callClusterStateListeners(ClusterChangedEvent clusterChangedEvent, StopWatch stopWatch) {
+        //遍历通知全部Listene
         Stream.concat(clusterStateListeners.stream(), timeoutClusterStateListeners.stream()).forEach(listener -> {
             try {
                 logger.trace("calling [{}] with change to version [{}]", listener, clusterChangedEvent.state().version());
                 try (Releasable ignored = stopWatch.timing("notifying listener [" + listener + "]")) {
+                    //调用各模块实现的clusterChanged
                     listener.clusterChanged(clusterChangedEvent);
                 }
             } catch (Exception ex) {
