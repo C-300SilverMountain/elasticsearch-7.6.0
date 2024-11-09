@@ -38,6 +38,7 @@ import java.util.Set;
 import static org.elasticsearch.cluster.coordination.Coordinator.ZEN1_BWC_TERM;
 
 /**
+ * 此类是Raft算法用于保存集群状态的
  * The core class of the cluster state coordination algorithm, directly implementing the
  * <a href="https://github.com/elastic/elasticsearch-formal-models/blob/master/ZenWithTerms/tla/ZenWithTerms.tla">formal model</a>
  */
@@ -452,6 +453,7 @@ public class CoordinationState {
 
     /**
      * Pluggable persistence layer for {@link CoordinationState}.
+     * 针对集群状态的 可插拔持久层
      */
     public interface PersistedState extends Closeable {
 

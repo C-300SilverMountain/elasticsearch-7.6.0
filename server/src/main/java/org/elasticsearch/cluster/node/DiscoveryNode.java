@@ -44,6 +44,8 @@ import java.util.stream.Collectors;
 
 /**
  * A discovery node represents a node that is part of the cluster.
+ * 代表集群当中的一个节点，初始启动时叫Node，启动成功加入集群后，叫DiscoveryNode
+ * 可理解DiscoveryNode代表当前节点，而且携带集群的状态
  */
 public class DiscoveryNode implements Writeable, ToXContentFragment {
 

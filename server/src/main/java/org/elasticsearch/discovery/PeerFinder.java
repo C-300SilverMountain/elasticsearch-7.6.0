@@ -263,7 +263,8 @@ public abstract class PeerFinder {
             logger.trace("not active");
             return peersRemoved;
         }
-
+        // 从集群状态中解析出：具有选举资格的节点，初次启动，肯定为空，所以加了一个步骤：resolveConfiguredHosts：从配置文件中读取
+        // 如果某个节点在集群中运行过一段时间，发送重启，那么大概率通过此步骤就触发重新选举，而不会走到resolveConfiguredHosts函数
         logger.trace("probing master nodes from cluster state: {}", lastAcceptedNodes);
         for (ObjectCursor<DiscoveryNode> discoveryNodeObjectCursor : lastAcceptedNodes.getMasterNodes().values()) {
             startProbe(discoveryNodeObjectCursor.value.getAddress());
@@ -337,6 +338,10 @@ public abstract class PeerFinder {
             return discoveryNode.get();
         }
 
+        /**
+         * 判断指定节点是否可通
+         * @return
+         */
         boolean handleWakeUp() {
             assert holdsLock() : "PeerFinder mutex not held";
 
@@ -361,12 +366,16 @@ public abstract class PeerFinder {
             return false;
         }
 
+        /**
+         * 建立链接：注是，与具有选举资格的节点建立链接
+         */
         void establishConnection() {
             assert holdsLock() : "PeerFinder mutex not held";
             assert getDiscoveryNode() == null : "unexpectedly connected to " + getDiscoveryNode();
             assert active;
 
             logger.trace("{} attempting connection", this);
+            // 此函数仅仅是建立  【当前节点与远程节点】  通信的连接而已，至于该链接是否可用，还需要执行 requestPeers(),来ping以下接口，查看接口是否正常
             transportAddressConnector.connectToRemoteMasterNode(transportAddress, new ActionListener<DiscoveryNode>() {
                 @Override
                 public void onResponse(DiscoveryNode remoteNode) {
@@ -379,6 +388,7 @@ public abstract class PeerFinder {
 
                         assert discoveryNode.get() == null : "discoveryNode unexpectedly already set to " + discoveryNode.get();
                         discoveryNode.set(remoteNode);
+                        // 发送ping命令，检查链接是否可用
                         requestPeers();
                     }
 

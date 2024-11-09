@@ -389,7 +389,7 @@ public class JoinHelper {
         default void close(Mode newMode) {
         }
     }
-
+    // Raft算法中四种角色：初始（InitialJoinAccumulator）、追随者（FollowerJoinAccumulator）、候选者（CandidateJoinAccumulator）、领导者（LeaderJoinAccumulator）
     class LeaderJoinAccumulator implements JoinAccumulator {
         @Override
         public void handleJoinRequest(DiscoveryNode sender, JoinCallback joinCallback) {

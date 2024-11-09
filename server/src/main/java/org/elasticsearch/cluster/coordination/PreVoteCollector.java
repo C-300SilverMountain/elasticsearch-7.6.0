@@ -46,6 +46,7 @@ public class PreVoteCollector {
 
     private static final Logger logger = LogManager.getLogger(PreVoteCollector.class);
 
+    // 预投票
     public static final String REQUEST_PRE_VOTE_ACTION_NAME = "internal:cluster/request_pre_vote";
 
     private final TransportService transportService;
@@ -71,6 +72,7 @@ public class PreVoteCollector {
 
     /**
      * Start a new pre-voting round.
+     * 开始执行预投票，预投票用于防止：由于网络问题，导致反复选举
      *
      * @param clusterState   the last-accepted cluster state
      * @param broadcastNodes the nodes from whom to request pre-votes
@@ -200,6 +202,7 @@ public class PreVoteCollector {
                 new Join(node, localNode, preVoteResponse.getCurrentTerm(),
                 preVoteResponse.getLastAcceptedTerm(), preVoteResponse.getLastAcceptedVersion())));
 
+            // 判断选票是否达到大多数，如果没有则直接返回
             if (electionStrategy.isElectionQuorum(clusterState.nodes().getLocalNode(), localPreVoteResponse.getCurrentTerm(),
                 localPreVoteResponse.getLastAcceptedTerm(), localPreVoteResponse.getLastAcceptedVersion(),
                 clusterState.getLastCommittedConfiguration(), clusterState.getLastAcceptedConfiguration(), voteCollection) == false) {

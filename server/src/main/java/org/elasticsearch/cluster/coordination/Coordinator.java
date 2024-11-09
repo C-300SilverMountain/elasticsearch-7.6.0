@@ -175,6 +175,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
         this.joinHelper = new JoinHelper(settings, allocationService, masterService, transportService,
             this::getCurrentTerm, this::getStateForMasterService, this::handleJoinRequest, this::joinLeaderInTerm, this.onJoinValidators,
             rerouteService);
+        // 来源于：gatewayMetaState::getPersistedState
         this.persistedStateSupplier = persistedStateSupplier;
         this.noMasterBlockService = new NoMasterBlockService(settings, clusterSettings);
         this.lastKnownLeader = Optional.empty();
@@ -396,7 +397,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
                     logger.trace("skip election as local node may not win it: {}", getLastAcceptedState().coordinationMetaData());
                     return;
                 }
-
+                // term任期 + 1，邀请其他节点加入集群
                 final StartJoinRequest startJoinRequest
                     = new StartJoinRequest(getLocalNode(), Math.max(getCurrentTerm(), maxTermSeen) + 1);
                 logger.debug("starting election with {}", startJoinRequest);
@@ -538,11 +539,18 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
         //不是 “候选人”
         if (mode != Mode.CANDIDATE) {
             final Mode prevMode = mode;
+            // 切换成【候选者】状态
             mode = Mode.CANDIDATE;
             cancelActivePublication("become candidate: " + method);
+            // 创建Coordinator是，创建的是： InitialJoinAccumulator，指定为：初始角色，通过选举后，才能切换其他角色
+            // 除了候选者角色，其他角色并没有重写此函数，但候选者无法在此调用CandidateJoinAccumulator.close
             joinAccumulator.close(mode);
+            // 到此，进行身份切换，InitialJoinAccumulator(初始)或FollowerJoinAccumulator(追随者)或LeaderJoinAccumulator(领导) 切换成 CandidateJoinAccumulator
+            // 值得注意的是: 节点任意时间点发生重启、或初次启动，节点的角色都为：InitialJoinAccumulator(初始)
             joinAccumulator = joinHelper.new CandidateJoinAccumulator();
-
+            // 获取所有具有参与选举资格的 节点，即已配置为master:true的节点
+            //peerFinder = CoordinatorPeerFinder
+            // 在函数doStart()中，初始化coordinationState，本质上是集群已持久化的集群状态
             peerFinder.activate(coordinationState.get().getLastAcceptedState().nodes());
             clusterFormationFailureHelper.start();
 
@@ -719,9 +727,13 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
         return new DiscoveryStats(new PendingClusterStateStats(0, 0, 0), publicationHandler.stats());
     }
 
+    /**
+     * Node初始化时，即es启动时，显式调用discovery.startInitialJoin()进行拉票选举;
+     */
     @Override
     public void startInitialJoin() {
         synchronized (mutex) {
+            // becomeCandidate进入选主流程
             becomeCandidate("startInitialJoin");
         }
         clusterBootstrapService.scheduleUnconfiguredBootstrap();
@@ -1008,6 +1020,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
     private List<DiscoveryNode> getDiscoveredNodes() {
         final List<DiscoveryNode> nodes = new ArrayList<>();
         nodes.add(getLocalNode());
+        // peerFinder 保存的是：具备选举资格的节点
         peerFinder.getFoundPeers().forEach(nodes::add);
         return nodes;
     }
@@ -1154,6 +1167,8 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
 
         @Override
         protected void startProbe(TransportAddress transportAddress) {
+            // single-node/legacy-zen(ZenDiscovery)/zen(Coordinator)
+            // 只有discovery.type = single-node时，singleNodeDiscovery才等于true，也就是说：singleNodeDiscovery默认false
             if (singleNodeDiscovery == false) {
                 super.startProbe(transportAddress);
             }
@@ -1167,10 +1182,12 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
                     final VoteCollection expectedVotes = new VoteCollection();
                     foundPeers.forEach(expectedVotes::addVote);
                     expectedVotes.addVote(Coordinator.this.getLocalNode());
+                    // 判断具有参与选主资格的节点总数是否过半
                     final boolean foundQuorum = coordinationState.get().isElectionQuorum(expectedVotes);
 
                     if (foundQuorum) {
                         if (electionScheduler == null) {
+                            // 开始去演讲拉票
                             startElectionScheduler();
                         }
                     } else {
@@ -1207,9 +1224,17 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
                         if (prevotingRound != null) {
                             prevotingRound.close();
                         }
+                        // 这里的节点列表指的是：具有参与选主资格的节点，并不是集群中所有的节点
                         final List<DiscoveryNode> discoveredNodes
                             = getDiscoveredNodes().stream().filter(n -> isZen1Node(n) == false).collect(Collectors.toList());
-
+                        // 预投票：为什么需要预投票？
+                        // 引入prevote的原因是为了防止集群发生毫无意义的反复选举的情况，例如：集群中存在网络故障使得某个节点暂时脱离集群，在该节点重新加入到集群后会干扰到集群的运行，
+                        // 具体分析：当该节点脱离集群后，在timeout时间内没有收到leader的心跳后就会发起新的选举，每次发起选举时term就会加1。
+                        // 由于网络隔离，该节点既不会被选为leader，也收不到leader的心跳，所以它会一直发起选举，使得其term不断增大。
+                        // 网络恢复后，当该节点重新加入集群时，由于其term比集群中其他节点的term大，导致集群中原来的节点更新自己的term并使leader变为follower，进行重新选举。
+                        // 为了防止这种情况发生，在选举开始前先进行prevote，以确认集群中大多数节点认为当前集群中没有leader。
+                        // 详细内容见：https://github.com/elastic/elasticsearch/pull/32847
+                        // 遍历以上节点列表，逐个去发送请求，演讲拉票（你到底累不累，还不能并发）
                         prevotingRound = preVoteCollector.start(lastAcceptedState, discoveredNodes);
                     }
                 }

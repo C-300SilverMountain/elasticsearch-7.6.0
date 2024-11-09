@@ -66,8 +66,8 @@ import static org.elasticsearch.node.Node.NODE_NAME_SETTING;
 public class DiscoveryModule {
     private static final Logger logger = LogManager.getLogger(DiscoveryModule.class);
 
-    public static final String ZEN_DISCOVERY_TYPE = "legacy-zen";
-    public static final String ZEN2_DISCOVERY_TYPE = "zen";
+    public static final String ZEN_DISCOVERY_TYPE = "legacy-zen"; // 旧版，7.6之前使用：ZenDiscovery
+    public static final String ZEN2_DISCOVERY_TYPE = "zen"; //默认使用: Coordinator
 
     public static final String SINGLE_NODE_DISCOVERY_TYPE = "single-node";
 
