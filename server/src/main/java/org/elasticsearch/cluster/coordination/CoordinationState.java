@@ -217,6 +217,7 @@ public class CoordinationState {
      * @throws CoordinationStateRejectedException if the arguments were incompatible with the current state of this object.
      */
     public boolean handleJoin(Join join) {
+        // 候选者必须是我（本地节点），否则报错
         assert join.targetMatches(localNode) : "handling join " + join + " for the wrong node " + localNode;
 
         if (join.getTerm() != getCurrentTerm()) {

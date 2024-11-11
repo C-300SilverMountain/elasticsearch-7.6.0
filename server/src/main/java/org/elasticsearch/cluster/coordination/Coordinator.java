@@ -1003,6 +1003,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
                     scheduleReconfigurationIfNeeded();
                 }
             } else {
+                // 重点：统计投票的逻辑
                 coordinationState.get().handleJoin(join); // this might fail and bubble up the exception
             }
         }
