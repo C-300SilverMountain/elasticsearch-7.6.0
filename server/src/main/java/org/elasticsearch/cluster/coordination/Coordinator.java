@@ -473,7 +473,11 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
         }
     }
 
-
+    /**
+     * 统计市民的投票，改变命运就在此刻
+     * @param joinRequest
+     * @param joinCallback
+     */
     private void handleJoinRequest(JoinRequest joinRequest, JoinHelper.JoinCallback joinCallback) {
         assert Thread.holdsLock(mutex) == false;
         assert getLocalNode().isMasterNode() : getLocalNode() + " received a join but is not master-eligible";
@@ -484,7 +488,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
                 "] set to [" + DiscoveryModule.SINGLE_NODE_DISCOVERY_TYPE  + "] discovery"));
             return;
         }
-
+        // joinRequest.getSourceNode() = 市民
         transportService.connectToNode(joinRequest.getSourceNode(), ActionListener.wrap(ignore -> {
             final ClusterState stateForJoinValidation = getStateForMasterService();
 
@@ -530,11 +534,12 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
         final Optional<Join> optionalJoin = joinRequest.getOptionalJoin();
         synchronized (mutex) {
             final CoordinationState coordState = coordinationState.get();
+            // 当前投票未加入前，是否已赢得投票（过半）
             final boolean prevElectionWon = coordState.electionWon();
 
             optionalJoin.ifPresent(this::handleJoin);
             joinAccumulator.handleJoinRequest(joinRequest.getSourceNode(), joinCallback);
-
+            // 当前投票未加入前，未赢得投票（过半），但加入后，便胜出（满足过半），则切换角色成为：Leader
             if (prevElectionWon == false && coordState.electionWon()) {
                 becomeLeader("handleJoinRequest");
             }

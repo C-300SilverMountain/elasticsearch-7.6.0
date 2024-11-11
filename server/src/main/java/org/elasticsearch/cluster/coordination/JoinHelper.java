@@ -120,7 +120,7 @@ public class JoinHelper {
             }
 
         };
-
+        // 统计市民的投票，改变命运就此刻
         transportService.registerRequestHandler(JOIN_ACTION_NAME, ThreadPool.Names.GENERIC, false, false, JoinRequest::new,
             (request, channel, task) -> joinHandler.accept(request, transportJoinCallback(request, channel)));
 
@@ -263,6 +263,9 @@ public class JoinHelper {
     }
 
     public void sendJoinRequest(DiscoveryNode destination, Optional<Join> optionalJoin, Runnable onCompletion) {
+        // 以下是：市民发出投票流程
+        // 由以下代码可看出，同一个任期，是可以投票给多个候选人的，而Raft算法规定同一任期内，是不能投给多个候选人的
+
         assert destination.isMasterNode() : "trying to join master-ineligible " + destination;
         final JoinRequest joinRequest = new JoinRequest(transportService.getLocalNode(), optionalJoin);
         final Tuple<DiscoveryNode, JoinRequest> dedupKey = Tuple.tuple(destination, joinRequest);
