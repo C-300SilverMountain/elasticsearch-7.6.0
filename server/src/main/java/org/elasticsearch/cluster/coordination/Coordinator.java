@@ -402,8 +402,17 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
                     = new StartJoinRequest(getLocalNode(), Math.max(getCurrentTerm(), maxTermSeen) + 1);
                 logger.debug("starting election with {}", startJoinRequest);
                 getDiscoveredNodes().forEach(node -> {
+                    // 7.0之前使用的是：legacy-zen
+                    // 7.0之后才使用Raft
+                    // 这里是保证是本市的市民（同样使用Raft算法的节点）
                     if (isZen1Node(node) == false) {
+                        // 开始演讲：邀请市民（其他节点）投票给我（本节点），注：仅仅发送请求，至于投票给我与否，下面的代码是未能感知的
+                        // 那我（本节点）如何感知，市民（node）是否投票给我？
                         joinHelper.sendStartJoinRequest(startJoinRequest, node);
+                        // 执行以上代码，流程大致如下：
+                        // 我发送投票邀请 => START_JOIN_ACTION_NAME
+                        // 市民接收到请邀请后，通过调用接口JOIN_ACTION_NAME，来通过我投票
+                        // 调用接口JOIN_ACTION_NAME完成后，市民才会结束投票邀请的请求
                     }
                 });
             }
@@ -1182,9 +1191,10 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
                     final VoteCollection expectedVotes = new VoteCollection();
                     foundPeers.forEach(expectedVotes::addVote);
                     expectedVotes.addVote(Coordinator.this.getLocalNode());
-                    // 判断具有参与选主资格的节点总数是否过半
+                    // 判断具有参与选主资格的节点总数是否过半，集群中具备选举资格的 节点数量 是否过半
                     final boolean foundQuorum = coordinationState.get().isElectionQuorum(expectedVotes);
 
+                    // 过半则执行 选举流程
                     if (foundQuorum) {
                         if (electionScheduler == null) {
                             // 开始去演讲拉票

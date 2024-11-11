@@ -129,6 +129,7 @@ public class JoinHelper {
             (request, channel, task) -> joinHandler.accept(new JoinRequest(request.getNode(), Optional.empty()), // treat as non-voting join
                 transportJoinCallback(request, channel)));
 
+        // 响应投票邀请
         transportService.registerRequestHandler(START_JOIN_ACTION_NAME, Names.GENERIC, false, false,
             StartJoinRequest::new,
             (request, channel, task) -> {
