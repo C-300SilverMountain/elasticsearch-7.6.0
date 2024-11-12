@@ -397,7 +397,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
                     logger.trace("skip election as local node may not win it: {}", getLastAcceptedState().coordinationMetaData());
                     return;
                 }
-                // term任期 + 1，邀请其他节点加入集群
+                // term任期 + 1，邀请其他节点加入集群（注：这里是邀请其他节点加入集群,term才+1，而预投票，term是不执行 +1）
                 final StartJoinRequest startJoinRequest
                     = new StartJoinRequest(getLocalNode(), Math.max(getCurrentTerm(), maxTermSeen) + 1);
                 logger.debug("starting election with {}", startJoinRequest);

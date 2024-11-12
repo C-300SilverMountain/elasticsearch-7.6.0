@@ -99,7 +99,7 @@ public class PreVoteCollector {
         logger.trace("updating with preVoteResponse={}, leader={}", preVoteResponse, leader);
         state = new Tuple<>(leader, preVoteResponse);
     }
-
+    // 选民 处理【预投票邀请】，通常该邀请是远程候选者发过来的
     private PreVoteResponse handlePreVoteRequest(final PreVoteRequest request) {
         updateMaxTermSeen.accept(request.getCurrentTerm());
 
