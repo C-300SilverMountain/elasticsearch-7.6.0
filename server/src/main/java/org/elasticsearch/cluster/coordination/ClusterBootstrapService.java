@@ -150,21 +150,24 @@ public class ClusterBootstrapService {
         if (unconfiguredBootstrapTimeout == null) {
             return;
         }
-
+        // Master角色权限校验
         if (transportService.getLocalNode().isMasterNode() == false) {
             return;
         }
 
         logger.info("no discovery configuration found, will perform best-effort cluster bootstrapping after [{}] " +
             "unless existing master is discovered", unconfiguredBootstrapTimeout);
-
+        // 执行启动任务
         transportService.getThreadPool().scheduleUnlessShuttingDown(unconfiguredBootstrapTimeout, Names.GENERIC, new Runnable() {
             @Override
             public void run() {
+                // 获取集群中发现的节点
                 final Set<DiscoveryNode> discoveredNodes = getDiscoveredNodes();
+                // 判断集群当中是否有节点的版本是 7.0 之前
                 final List<DiscoveryNode> zen1Nodes = discoveredNodes.stream().filter(Coordinator::isZen1Node).collect(Collectors.toList());
                 if (zen1Nodes.isEmpty()) {
                     logger.debug("performing best-effort cluster bootstrapping with {}", discoveredNodes);
+                    // 启动选举
                     startBootstrap(discoveredNodes, emptyList());
                 } else {
                     logger.info("avoiding best-effort cluster bootstrapping due to discovery of pre-7.0 nodes {}", zen1Nodes);
@@ -184,6 +187,7 @@ public class ClusterBootstrapService {
     }
 
     private void startBootstrap(Set<DiscoveryNode> discoveryNodes, List<String> unsatisfiedRequirements) {
+        // 判断发现的节点是否有Master角色权限
         assert discoveryNodes.stream().allMatch(DiscoveryNode::isMasterNode) : discoveryNodes;
         assert discoveryNodes.stream().noneMatch(Coordinator::isZen1Node) : discoveryNodes;
         assert unsatisfiedRequirements.size() < discoveryNodes.size() : discoveryNodes + " smaller than " + unsatisfiedRequirements;
@@ -202,9 +206,11 @@ public class ClusterBootstrapService {
         assert transportService.getLocalNode().isMasterNode();
 
         try {
+            // 触发投票
             votingConfigurationConsumer.accept(votingConfiguration);
         } catch (Exception e) {
             logger.warn(new ParameterizedMessage("exception when bootstrapping with {}, rescheduling", votingConfiguration), e);
+            // 如果出现异常，进行重试
             transportService.getThreadPool().scheduleUnlessShuttingDown(TimeValue.timeValueSeconds(10), Names.GENERIC,
                 new Runnable() {
                     @Override

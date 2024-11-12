@@ -550,7 +550,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
         assert Thread.holdsLock(mutex) : "Coordinator mutex not held";
         logger.debug("{}: coordinator becoming CANDIDATE in term {} (was {}, lastKnownLeader was [{}])",
             method, getCurrentTerm(), mode, lastKnownLeader);
-        //不是 “候选人”
+        //不是 “候选人”, 判断节点的角色是否是候选者，因为Raft协议中候选者才可以发起leader选举，所以第一步需要把当前节点转为候选者节点；
         if (mode != Mode.CANDIDATE) {
             final Mode prevMode = mode;
             // 切换成【候选者】状态
@@ -578,8 +578,9 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
             followersChecker.clearCurrentNodes();
             followersChecker.updateFastResponseState(getCurrentTerm(), mode);
             lagDetector.clearTrackedNodes();
-
+            // 如果之前是Leader
             if (prevMode == Mode.LEADER) {
+                // 清除Master相关信息
                 cleanMasterService();
             }
 
@@ -589,7 +590,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
                 });
             }
         }
-
+        // 更新PreVoteCollector里面记录的leader节点和Term信息，这里还没有选举出leader，所以传入的是null
         preVoteCollector.update(getPreVoteResponse(), null);
     }
 
@@ -676,6 +677,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
     }
 
     private PreVoteResponse getPreVoteResponse() {
+        // 创建PreVoteResponse，记录当前Term、上一次接受的Term和上一次接受的版本
         return new PreVoteResponse(getCurrentTerm(), coordinationState.get().getLastAcceptedTerm(),
             coordinationState.get().getLastAcceptedState().getVersionOrMetaDataVersion());
     }
@@ -743,13 +745,16 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
 
     /**
      * Node初始化时，即es启动时，显式调用discovery.startInitialJoin()进行拉票选举;
+     * @see https://www.cnblogs.com/shanml/p/16684887.html
      */
     @Override
     public void startInitialJoin() {
+        // 如果当前节点是候选者状态，是不会执行becomeCandidate的话，而是直接执行scheduleUnconfiguredBootstrap
         synchronized (mutex) {
             // becomeCandidate进入选主流程
             becomeCandidate("startInitialJoin");
         }
+        // 启动选举任务
         clusterBootstrapService.scheduleUnconfiguredBootstrap();
     }
 
@@ -864,6 +869,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
     }
 
     /**
+     * 首先进行一系列的校验，如果校验不通过不能进行选举：
      * Sets the initial configuration to the given {@link VotingConfiguration}. This method is safe to call
      * more than once, as long as the argument to each call is the same.
      *
@@ -874,17 +880,20 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
         synchronized (mutex) {
             final ClusterState currentState = getStateForMasterService();
 
+            //是否已经初始化过；
             if (isInitialConfigurationSet()) {
                 logger.debug("initial configuration already set, ignoring {}", votingConfiguration);
                 return false;
             }
 
+            //当前节点是有Master角色权限；
             if (getLocalNode().isMasterNode() == false) {
                 logger.debug("skip setting initial configuration as local node is not a master-eligible node");
                 throw new CoordinationStateRejectedException(
                     "this node is not master-eligible, but cluster bootstrapping can only happen on a master-eligible node");
             }
 
+            //集群中的节点是否包含当前节点；
             if (votingConfiguration.getNodeIds().contains(getLocalNode().getId()) == false) {
                 logger.debug("skip setting initial configuration as local node is not part of initial configuration");
                 throw new CoordinationStateRejectedException("local node is not part of initial configuration");
@@ -894,6 +903,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
             knownNodes.add(getLocalNode());
             peerFinder.getFoundPeers().forEach(knownNodes::add);
 
+            //集群中的节点个数是否达到了Quorum个；
             if (votingConfiguration.hasQuorum(knownNodes.stream().map(DiscoveryNode::getId).collect(Collectors.toList())) == false) {
                 logger.debug("skip setting initial configuration as not enough nodes discovered to form a quorum in the " +
                     "initial configuration [knownNodes={}, {}]", knownNodes, votingConfiguration);
@@ -916,6 +926,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
             assert localNodeMayWinElection(getLastAcceptedState()) :
                 "initial state does not allow local node to win election: " + getLastAcceptedState().coordinationMetaData();
             preVoteCollector.update(getPreVoteResponse(), null); // pick up the change to last-accepted version
+            // 前面几个条件都满足的话，则执行选举流程
             startElectionScheduler();
             return true;
         }
@@ -1218,7 +1229,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
 
     private void startElectionScheduler() {
         assert electionScheduler == null : electionScheduler;
-
+        // 必须具备参选资格
         if (getLocalNode().isMasterNode() == false) {
             return;
         }
@@ -1228,6 +1239,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
             @Override
             public void run() {
                 synchronized (mutex) {
+                    // 必须是候选人资格
                     if (mode == Mode.CANDIDATE) {
                         final ClusterState lastAcceptedState = coordinationState.get().getLastAcceptedState();
 
@@ -1240,7 +1252,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
                         if (prevotingRound != null) {
                             prevotingRound.close();
                         }
-                        // 这里的节点列表指的是：具有参与选主资格的节点，并不是集群中所有的节点
+                        // 这里的节点列表指的是：具有参与选主资格的节点 且 这些节点版本必须是 7.0 之后，并不是集群中所有的节点
                         final List<DiscoveryNode> discoveredNodes
                             = getDiscoveredNodes().stream().filter(n -> isZen1Node(n) == false).collect(Collectors.toList());
                         // 预投票：为什么需要预投票？
