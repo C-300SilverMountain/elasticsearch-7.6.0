@@ -463,7 +463,9 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
             final Join join = coordinationState.get().handleStartJoin(startJoinRequest);
             lastJoin = Optional.of(join);
             peerFinder.setCurrentTerm(getCurrentTerm());
+            // 如果当前节点是Leader，仍然收到其他节点的投票邀请，那么当前节点就执行“退位”（becomeCandidate），进行重新选举
             if (mode != Mode.CANDIDATE) {
+                // https://www.easyice.cn/archives/382
                 becomeCandidate("joinLeaderInTerm"); // updates followersChecker and preVoteCollector
             } else {
                 followersChecker.updateFastResponseState(getCurrentTerm(), mode);
@@ -555,6 +557,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
             final Mode prevMode = mode;
             // 切换成【候选者】状态
             mode = Mode.CANDIDATE;
+            // 取消待执行的 集群状态发布任务
             cancelActivePublication("become candidate: " + method);
             // 创建Coordinator是，创建的是： InitialJoinAccumulator，指定为：初始角色，通过选举后，才能切换其他角色
             // 除了候选者角色，其他角色并没有重写此函数，但候选者无法在此调用CandidateJoinAccumulator.close
@@ -603,6 +606,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
             method, getCurrentTerm(), mode, lastKnownLeader);
 
         mode = Mode.LEADER;
+        // 发布集群状态
         joinAccumulator.close(mode);
         joinAccumulator = joinHelper.new LeaderJoinAccumulator();
 
@@ -1000,6 +1004,12 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
 
     private void handleJoin(Join join) {
         synchronized (mutex) {
+            // 该方法非常重要，es并没有完全按照Raft算法规定，来约束同一个term内只能投票一次，反而是在es中同一个term，可以投票多次。则在同一个term中可能发生以下多主情况：
+            // 竞选比较激烈的情况下，同一term是可能选出多主，es采用的解决方案是：后来者居上
+            // Node2被选为主：收到的投票为：Node2,Node3
+            // Node3被选为主：收到的投票为：Node3,Node1
+            // 针对以上情况，Node2成为领导后，竟然还收到Node3投票邀请，此时Node2会退位，成为候选者重新走投票流程。那么退位就在ensureTermAtLeast方法中有所体验
+            // 参考: https://www.easyice.cn/archives/332
             ensureTermAtLeast(getLocalNode(), join.getTerm()).ifPresent(this::handleJoin);
 
             if (coordinationState.get().electionWon()) {

@@ -219,7 +219,7 @@ public class CoordinationState {
     public boolean handleJoin(Join join) {
         // 候选者必须是我（本地节点），否则报错
         assert join.targetMatches(localNode) : "handling join " + join + " for the wrong node " + localNode;
-
+        // 选民的投向的任期 不等于 当前节点的任期
         if (join.getTerm() != getCurrentTerm()) {
             logger.debug("handleJoin: ignored join due to term mismatch (expected: [{}], actual: [{}])",
                 getCurrentTerm(), join.getTerm());

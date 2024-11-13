@@ -895,6 +895,7 @@ public class Node implements Closeable {
         injector.getInstance(GatewayService.class).start(); //网关服务，负责集群元数据的持久化和恢复。
         //节点发现模块是一个可插拔的模块，其负责发现集群中其他的节点，发布集群状态到所有节点，选举主节点和发布集群状态变更事件。
         Discovery discovery = injector.getInstance(Discovery.class);
+        // 配置集群状态发布器
         clusterService.getMasterService().setClusterStatePublisher(discovery::publish);
 
         // Start the transport service now so the publish address will be added to the local disco node in ClusterService
