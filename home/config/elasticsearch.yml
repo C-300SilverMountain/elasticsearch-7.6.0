@@ -67,12 +67,12 @@ network.host: localhost
 #
 # --------------------------------- Discovery ----------------------------------
 
-discovery.type: legacy-zen
+discovery.type: zen
 #
 # Pass an initial list of hosts to perform discovery when this node is started:
 # The default list of hosts is ["127.0.0.1", "[::1]"]
 #
-#discovery.seed_hosts: ["127.0.0.1:9301"]
+discovery.seed_hosts: ["127.0.0.1:9301"]
 #
 # Bootstrap the cluster using an initial set of master-eligible nodes:
 #

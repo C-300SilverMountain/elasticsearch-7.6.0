@@ -115,7 +115,8 @@ public class DiscoveryModule {
                 }
             });
         }
-
+        // 种子主机：集群初始启动时，并不知道具备选举资格的节点的信息，所以需要手动配置
+        // 读取配置文件中，discovery.seed_providers的值
         List<String> seedProviderNames = getSeedProviderNames(settings);
         // for bwc purposes, add settings provider even if not explicitly specified
         if (seedProviderNames.contains("settings") == false) {
@@ -152,6 +153,7 @@ public class DiscoveryModule {
         if (ZEN2_DISCOVERY_TYPE.equals(discoveryType) || SINGLE_NODE_DISCOVERY_TYPE.equals(discoveryType)) {
             //ES 7.x 重构了一个新的集群协调层Coordinator，他实际上是 Raft 的实现，但并非严格按照 Raft 论文实现，而是做了一些调整。
             //默认使用：Coordinator
+            // 请关注seedHostsProvider的来源，此参数在选举流程中用到
             discovery = new Coordinator(NODE_NAME_SETTING.get(settings),
                 settings, clusterSettings,
                 transportService, namedWriteableRegistry, allocationService, masterService, gatewayMetaState::getPersistedState,

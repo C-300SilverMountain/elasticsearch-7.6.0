@@ -147,10 +147,12 @@ public class ElectionSchedulerFactory {
                 logger.debug("{} not scheduling election", this);
                 return;
             }
-
+           //重试次数，每次加 1
             final long thisAttempt = attempt.getAndIncrement();
             // to overflow here would take over a million years of failed election attempts, so we won't worry about that:
+            //最大延迟时间不超过cluster.election.max_timeout配置，每次递增cluster.election.back_off_time
             final long maxDelayMillis = Math.min(maxTimeout.millis(), initialTimeout.millis() + thisAttempt * backoffTime.millis());
+            //执行延迟在cluster.election.duration基础上递增随机值
             final long delayMillis = toPositiveLongAtMost(random.nextLong(), maxDelayMillis) + gracePeriod.millis();
             final Runnable runnable = new AbstractRunnable() {
                 @Override
@@ -165,7 +167,9 @@ public class ElectionSchedulerFactory {
                         logger.debug("{} not starting election", this);
                     } else {
                         logger.debug("{} starting election", this);
+                        //先设置下次多久后，再次执行此方法，即递归执行，直到成功或超时
                         scheduleNextElection(duration, scheduledRunnable);
+                        // 真正的竞选流程
                         scheduledRunnable.run();
                     }
                 }

@@ -451,6 +451,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
 
     private Optional<Join> ensureTermAtLeast(DiscoveryNode sourceNode, long targetTerm) {
         assert Thread.holdsLock(mutex) : "Coordinator mutex not held";
+        // 非常经典：当
         if (getCurrentTerm() < targetTerm) {
             return Optional.of(joinLeaderInTerm(new StartJoinRequest(sourceNode, targetTerm)));
         }
@@ -558,23 +559,26 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
             // 切换成【候选者】状态
             mode = Mode.CANDIDATE;
             // 取消待执行的 集群状态发布任务
+            // 当集群竞选比较激烈时，假如节点A已胜出选举，但还没有发布状态，此时其他节点又重新发起选举，此时节点A也会收到投票邀请，于是节点A就降级切换成候选节点，且通过以下代码取消状态发布
             cancelActivePublication("become candidate: " + method);
-            // 创建Coordinator是，创建的是： InitialJoinAccumulator，指定为：初始角色，通过选举后，才能切换其他角色
-            // 除了候选者角色，其他角色并没有重写此函数，但候选者无法在此调用CandidateJoinAccumulator.close
-            joinAccumulator.close(mode);
+            // 节点初次启动，创建的是： InitialJoinAccumulator，指定为：初始角色，通过选举后，才能切换其他角色
+            // 又或者，已运行一段时间的节点，发起重选举，此时也会切换成候选人，再执行选举流程
+            // 除了候选者角色，其他角色并没有重写此函数，但候选者无法在此调用CandidateJoinAccumulator.close，因此此处实际跑 【空函数】
+            // 值得注意的是：候选人角色是临时状态，一旦选主成功，所有节点要么是追随者，要么是主节点，也就是说，候选人角色仅在选主过程中才会出现，其他情况都不存在候选人角色
+            joinAccumulator.close(mode); //
             // 到此，进行身份切换，InitialJoinAccumulator(初始)或FollowerJoinAccumulator(追随者)或LeaderJoinAccumulator(领导) 切换成 CandidateJoinAccumulator
-            // 值得注意的是: 节点任意时间点发生重启、或初次启动，节点的角色都为：InitialJoinAccumulator(初始)
+            // 值得注意的是: 节点任意时间点发生重启、或初次启动，节点的角色都为：InitialJoinAccumulator(初始),然后通过以下代码切换成 CandidateJoinAccumulator
             joinAccumulator = joinHelper.new CandidateJoinAccumulator();
             // 获取所有具有参与选举资格的 节点，即已配置为master:true的节点
             //peerFinder = CoordinatorPeerFinder
-            // 在函数doStart()中，初始化coordinationState，本质上是集群已持久化的集群状态
+            // coordinationState从哪里得到？ 在函数doStart()中，初始化coordinationState，本质上是集群已持久化的集群状态
             peerFinder.activate(coordinationState.get().getLastAcceptedState().nodes());
             clusterFormationFailureHelper.start();
 
             if (getCurrentTerm() == ZEN1_BWC_TERM) {
                 discoveryUpgradeService.activate(lastKnownLeader, coordinationState.get().getLastAcceptedState());
             }
-
+            // 取消心跳
             leaderChecker.setCurrentNodes(DiscoveryNodes.EMPTY_NODES);
             leaderChecker.updateLeader(null);
 
@@ -614,6 +618,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
         peerFinder.deactivate(getLocalNode());
         discoveryUpgradeService.deactivate();
         clusterFormationFailureHelper.stop();
+        // 关闭递归竞选任务,阻止新的选举
         closePrevotingAndElectionScheduler();
         preVoteCollector.update(getPreVoteResponse(), getLocalNode());
 
@@ -647,6 +652,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
         peerFinder.deactivate(leaderNode);
         discoveryUpgradeService.deactivate();
         clusterFormationFailureHelper.stop();
+        // 清除新的选举流程
         closePrevotingAndElectionScheduler();
         cancelActivePublication("become follower: " + method);
         preVoteCollector.update(getPreVoteResponse(), leaderNode);
@@ -715,8 +721,10 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
     @Override
     protected void doStart() {
         synchronized (mutex) {
+            // 获取已持久化的集群状态数据
             CoordinationState.PersistedState persistedState = persistedStateSupplier.get();
             coordinationState.set(new CoordinationState(getLocalNode(), persistedState, electionStrategy));
+            // 当前任期
             peerFinder.setCurrentTerm(getCurrentTerm());
             configuredHostsResolver.start();
             final ClusterState lastAcceptedState = coordinationState.get().getLastAcceptedState();
@@ -753,12 +761,12 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
      */
     @Override
     public void startInitialJoin() {
-        // 如果当前节点是候选者状态，是不会执行becomeCandidate的话，而是直接执行scheduleUnconfiguredBootstrap
+        // 如果当前节点是候选者状态，是不会执行becomeCandidate的话，而是直接执行scheduleUnconfiguredBootstrap进行选举
+        // 因为如果是非候选者状态，才需要执行必要状态清零操作
         synchronized (mutex) {
             // becomeCandidate进入选主流程
             becomeCandidate("startInitialJoin");
         }
-        // 启动选举任务
         clusterBootstrapService.scheduleUnconfiguredBootstrap();
     }
 
@@ -930,7 +938,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
             assert localNodeMayWinElection(getLastAcceptedState()) :
                 "initial state does not allow local node to win election: " + getLastAcceptedState().coordinationMetaData();
             preVoteCollector.update(getPreVoteResponse(), null); // pick up the change to last-accepted version
-            // 前面几个条件都满足的话，则执行选举流程
+            // 前面几个条件都满足的话，则执行选举流程，注意以下方法是延迟任务，延迟任务降低竞争激烈程度，避免反复竞选，保证成功率
             startElectionScheduler();
             return true;
         }
@@ -1125,6 +1133,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
                 currentPublication = Optional.of(publication);
 
                 final DiscoveryNodes publishNodes = publishRequest.getAcceptedState().nodes();
+                // 启动心跳程序
                 leaderChecker.setCurrentNodes(publishNodes);
                 followersChecker.setCurrentNodes(publishNodes);
                 lagDetector.setTrackedNodes(publishNodes);
@@ -1223,6 +1232,9 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
 
                     // 过半则执行 选举流程
                     if (foundQuorum) {
+                        // electionScheduler == null: 避免重复执行onFoundPeersUpdated()
+                        // 选举流程中，多次执行onFoundPeersUpdated，那么通常以下代码控制仅允许首次可执行startElectionScheduler，
+                        // 一旦执行过startElectionScheduler，electionScheduler就不为空，后续的调用就不会重复执行startElectionScheduler
                         if (electionScheduler == null) {
                             // 开始去演讲拉票
                             startElectionScheduler();
@@ -1245,6 +1257,9 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
         }
 
         final TimeValue gracePeriod = TimeValue.ZERO; // TODO variable grace period
+        // 延迟执行
+        // 当出现竞选激烈时，为了避免多次竞选失败又重试，es采用了延迟竞选策略来避免此类问题
+        // 注：每个节点延迟时间是随机的，在一定程度上降低竞争激烈程度，保证成功率！！！
         electionScheduler = electionSchedulerFactory.startElectionScheduler(gracePeriod, new Runnable() {
             @Override
             public void run() {
@@ -1263,6 +1278,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
                             prevotingRound.close();
                         }
                         // 这里的节点列表指的是：具有参与选主资格的节点 且 这些节点版本必须是 7.0 之后，并不是集群中所有的节点
+                        // 注：discoveredNodes包含本节点，也就是说，自个投自个一票
                         final List<DiscoveryNode> discoveredNodes
                             = getDiscoveredNodes().stream().filter(n -> isZen1Node(n) == false).collect(Collectors.toList());
                         // 预投票：为什么需要预投票？

@@ -120,13 +120,15 @@ public abstract class PeerFinder {
         logger.trace("activating with {}", lastAcceptedNodes);
 
         synchronized (mutex) {
+            // 简单的参数条件判断
             assert assertInactiveWithNoKnownPeers();
             active = true;
             this.lastAcceptedNodes = lastAcceptedNodes;
             leader = Optional.empty();
+            // 跟具备master参选资格的节点建立起链接，当链接成功个数满足过半时，立即就发起选举，没必要等所有链接建立完成后，才发起选举流程。
             handleWakeUp(); // return value discarded: there are no known peers, so none can be disconnected
         }
-
+        // 触发onFoundPeersUpdated()1次
         onFoundPeersUpdated(); // trigger a check for a quorum already
     }
 
@@ -264,7 +266,7 @@ public abstract class PeerFinder {
             return peersRemoved;
         }
         // 从集群状态中解析出：具有选举资格的节点，初次启动，肯定为空，所以加了一个步骤：resolveConfiguredHosts：从配置文件中读取
-        // 如果某个节点在集群中运行过一段时间，发送重启，那么大概率通过此步骤就触发重新选举，而不会走到resolveConfiguredHosts函数
+        // 如果某个节点在集群中运行过一段时间后，发送重启,或主节点掉线/宕机，那么大概率通过此步骤就触发重新选举，而不会走到resolveConfiguredHosts函数
         logger.trace("probing master nodes from cluster state: {}", lastAcceptedNodes);
         for (ObjectCursor<DiscoveryNode> discoveryNodeObjectCursor : lastAcceptedNodes.getMasterNodes().values()) {
             startProbe(discoveryNodeObjectCursor.value.getAddress());
@@ -297,6 +299,7 @@ public abstract class PeerFinder {
                         return;
                     }
                 }
+                // 触发onFoundPeersUpdated()3次
                 onFoundPeersUpdated();
             }
 
@@ -393,6 +396,7 @@ public abstract class PeerFinder {
                     }
 
                     assert holdsLock() == false : "PeerFinder mutex is held in error";
+                    // 触发onFoundPeersUpdated()2次
                     onFoundPeersUpdated();
                 }
 

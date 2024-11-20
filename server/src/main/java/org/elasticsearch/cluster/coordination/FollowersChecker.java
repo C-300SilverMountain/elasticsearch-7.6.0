@@ -330,6 +330,7 @@ public class FollowersChecker {
 
                         failureCountSinceLastSuccess = 0;
                         logger.trace("{} check successful", FollowerChecker.this);
+                        // 配置下一次检测流程，即递归执行
                         scheduleNextWakeUp();
                     }
 
