@@ -234,7 +234,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
             }
         }
     }
-
+    // 来自主节点的心跳探测
     void onFollowerCheckRequest(FollowerCheckRequest followerCheckRequest) {
         synchronized (mutex) {
             ensureTermAtLeast(followerCheckRequest.getSender(), followerCheckRequest.getTerm());
@@ -451,7 +451,6 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
 
     private Optional<Join> ensureTermAtLeast(DiscoveryNode sourceNode, long targetTerm) {
         assert Thread.holdsLock(mutex) : "Coordinator mutex not held";
-        // 非常经典：当
         if (getCurrentTerm() < targetTerm) {
             return Optional.of(joinLeaderInTerm(new StartJoinRequest(sourceNode, targetTerm)));
         }
@@ -477,7 +476,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
     }
 
     /**
-     * 统计市民的投票，改变命运就在此刻
+     * 候选人/主节点才会执行此函数：统计市民的投票，改变命运就在此刻
      * @param joinRequest
      * @param joinCallback
      */
@@ -491,6 +490,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
                 "] set to [" + DiscoveryModule.SINGLE_NODE_DISCOVERY_TYPE  + "] discovery"));
             return;
         }
+        // 候选人/主节点 主动连接 【投票人】，能连接上，则认为此投票有效，然笑纳了
         // joinRequest.getSourceNode() = 市民
         transportService.connectToNode(joinRequest.getSourceNode(), ActionListener.wrap(ignore -> {
             final ClusterState stateForJoinValidation = getStateForMasterService();
@@ -559,7 +559,8 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
             // 切换成【候选者】状态
             mode = Mode.CANDIDATE;
             // 取消待执行的 集群状态发布任务
-            // 当集群竞选比较激烈时，假如节点A已胜出选举，但还没有发布状态，此时其他节点又重新发起选举，此时节点A也会收到投票邀请，于是节点A就降级切换成候选节点，且通过以下代码取消状态发布
+            // 当集群竞选比较激烈时，假如节点A已胜出选举，但还没有发布状态，此时其他节点又重新发起选举，紧接着节点A收到投票邀请，于是节点A就降级切换成候选节点，且通过以下代码取消状态发布
+            // 如此，反复选举，甚至一直持续很长时间。为了解决此类问题，增加了延迟选举机制，即不立即执行选举，而是采用每个节点延迟执行选举任务，延迟时间随机
             cancelActivePublication("become candidate: " + method);
             // 节点初次启动，创建的是： InitialJoinAccumulator，指定为：初始角色，通过选举后，才能切换其他角色
             // 又或者，已运行一段时间的节点，发起重选举，此时也会切换成候选人，再执行选举流程
@@ -756,15 +757,16 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
     }
 
     /**
-     * Node初始化时，即es启动时，显式调用discovery.startInitialJoin()进行拉票选举;
+     * es启动，Node初始化时，会显式调用discovery.startInitialJoin()进行拉票选举;
      * @see https://www.cnblogs.com/shanml/p/16684887.html
      */
     @Override
     public void startInitialJoin() {
-        // 如果当前节点是候选者状态，是不会执行becomeCandidate的话，而是直接执行scheduleUnconfiguredBootstrap进行选举
+        // 如果当前节点是候选者状态，是不会执行becomeCandidate的，而是直接执行scheduleUnconfiguredBootstrap进行选举。
         // 因为如果是非候选者状态，才需要执行必要状态清零操作
+        // 注：无论是何种方式触发的选举，最终的会调用startElectionScheduler启动选举，该方法并不会立即执行选举，而是采用随机延迟执行，酱紫可避免不必要的竞争
         synchronized (mutex) {
-            // becomeCandidate进入选主流程
+            // becomeCandidate：先进行必要的清零操作，再进入选主流程
             becomeCandidate("startInitialJoin");
         }
         clusterBootstrapService.scheduleUnconfiguredBootstrap();
@@ -964,6 +966,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
             .filter(coordinationState.get()::containsJoinVoteFor)
             .filter(discoveryNode -> isZen1Node(discoveryNode) == false)
             .collect(Collectors.toSet());
+
         final VotingConfiguration newConfig = reconfigurator.reconfigure(liveNodes,
             Stream.concat(masterIneligibleNodeIdsInVotingConfig, excludedNodeIds).collect(Collectors.toSet()),
             getLocalNode(), clusterState.getLastAcceptedConfiguration());
@@ -1133,8 +1136,9 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
                 currentPublication = Optional.of(publication);
 
                 final DiscoveryNodes publishNodes = publishRequest.getAcceptedState().nodes();
-                // 启动心跳程序
+
                 leaderChecker.setCurrentNodes(publishNodes);
+                // 启动心跳程序：让其他节点放弃选举，而成为当前节点的【追随者】
                 followersChecker.setCurrentNodes(publishNodes);
                 lagDetector.setTrackedNodes(publishNodes);
                 publication.start(followersChecker.getFaultyNodes());
@@ -1201,11 +1205,13 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
             super(settings, transportService, transportAddressConnector,
                 singleNodeDiscovery ? hostsResolver -> Collections.emptyList() : configuredHostsResolver);
         }
-
+        // ping通了主节点
         @Override
         protected void onActiveMasterFound(DiscoveryNode masterNode, long term) {
             synchronized (mutex) {
+                // masterNode：主节点；term：主节点任期
                 ensureTermAtLeast(masterNode, term);
+                // 发送加入集群请求，以示臣服
                 joinHelper.sendJoinRequest(masterNode, joinWithDestination(lastJoin, masterNode, term));
             }
         }
@@ -1286,9 +1292,10 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
                         // 具体分析：当该节点脱离集群后，在timeout时间内没有收到leader的心跳后就会发起新的选举，每次发起选举时term就会加1。
                         // 由于网络隔离，该节点既不会被选为leader，也收不到leader的心跳，所以它会一直发起选举，使得其term不断增大。
                         // 网络恢复后，当该节点重新加入集群时，由于其term比集群中其他节点的term大，导致集群中原来的节点更新自己的term并使leader变为follower，进行重新选举。
-                        // 为了防止这种情况发生，在选举开始前先进行prevote，以确认集群中大多数节点认为当前集群中没有leader。
+                        // 为了防止这种情况发生，在选举开始前先进行预投票prevote，以确认集群中大多数节点认为当前集群中没有leader。
                         // 详细内容见：https://github.com/elastic/elasticsearch/pull/32847
-                        // 遍历以上节点列表，逐个去发送请求，演讲拉票（你到底累不累，还不能并发）
+                        // 遍历以上节点列表，逐个去发送请求，演讲拉票（你到底累不累，还不能并发）。不对，是异步的且并发，因为transportService.sendRequest用netty通信，netty内部是异步的
+                        // 可以这么理解：transportService.sendRequest将发送请求封装成任务，放到任务队列里，netty维护着线程池，通过这些线程池执行任务。所以是异步的。
                         prevotingRound = preVoteCollector.start(lastAcceptedState, discoveredNodes);
                     }
                 }

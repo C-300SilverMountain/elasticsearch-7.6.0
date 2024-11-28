@@ -119,9 +119,11 @@ public abstract class PeerFinder {
     public void activate(final DiscoveryNodes lastAcceptedNodes) {
         logger.trace("activating with {}", lastAcceptedNodes);
 
+        // 加锁，防止并发
         synchronized (mutex) {
             // 简单的参数条件判断
             assert assertInactiveWithNoKnownPeers();
+            // 激活探查状态，等于true
             active = true;
             this.lastAcceptedNodes = lastAcceptedNodes;
             leader = Optional.empty();
@@ -260,7 +262,7 @@ public abstract class PeerFinder {
         assert holdsLock() : "PeerFinder mutex not held";
 
         final boolean peersRemoved = peersByAddress.values().removeIf(Peer::handleWakeUp);
-
+        // 假如探查状态为false，则返回
         if (active == false) {
             logger.trace("not active");
             return peersRemoved;
@@ -312,18 +314,21 @@ public abstract class PeerFinder {
         return peersRemoved;
     }
 
+    // 启动探查
     protected void startProbe(TransportAddress transportAddress) {
+        // 验证是否锁定 mutex对象，如没有，则报错
         assert holdsLock() : "PeerFinder mutex not held";
+        // 验证探查状态是否激活，如没有，则返回
         if (active == false) {
             logger.trace("startProbe({}) not running", transportAddress);
             return;
         }
-
+        // 校验目标节点是否当前节点，如是，则返回。因为没必要，连接自身
         if (transportAddress.equals(getLocalNode().getAddress())) {
             logger.trace("startProbe({}) not probing local node", transportAddress);
             return;
         }
-
+        // 创建与目标节点的连接，并保存到 peersByAddress,注：peersByAddress保存的是：具备选举资格的节点
         peersByAddress.computeIfAbsent(transportAddress, this::createConnectingPeer);
     }
 
@@ -373,25 +378,35 @@ public abstract class PeerFinder {
          * 建立链接：注是，与具有选举资格的节点建立链接
          */
         void establishConnection() {
+            // 校验是否持有mutex锁，如没有，则报错。好几个地方都反复校验这个锁
             assert holdsLock() : "PeerFinder mutex not held";
+            // 必须保证getDiscoveryNode()为空，否则报错，暂时未知原因
+            // 下面创建连接成功后，执行了discoveryNode.set(remoteNode)，说明该节点已连接成功，discoveryNode.set(remoteNode)作用：保存连接。
             assert getDiscoveryNode() == null : "unexpectedly connected to " + getDiscoveryNode();
+            // 校验探查状态是否激活，如没有，则报错。好几个地方都反复校验探查状态
             assert active;
 
             logger.trace("{} attempting connection", this);
-            // 此函数仅仅是建立  【当前节点与远程节点】  通信的连接而已，至于该链接是否可用，还需要执行 requestPeers(),来ping以下接口，查看接口是否正常
+            // 此函数仅仅是建立  【当前节点与远程节点】  通信的连接而已，至于该链接是否可用，还需要执行 requestPeers(),来ping一下接口，验证接口是否正常
             transportAddressConnector.connectToRemoteMasterNode(transportAddress, new ActionListener<DiscoveryNode>() {
                 @Override
                 public void onResponse(DiscoveryNode remoteNode) {
+                    // 对方节点必须是 具备选举资格的节点
                     assert remoteNode.isMasterNode() : remoteNode + " is not master-eligible";
+                    // 对方节点不能是 本节点
                     assert remoteNode.equals(getLocalNode()) == false : remoteNode + " is the local node";
+                    // 校验是否持有mutex锁，如没有，则报错。好几个地方都反复校验这个锁
                     synchronized (mutex) {
+                        // 校验探查状态是否激活，如没有，则报错。好几个地方都反复校验探查状态
                         if (active == false) {
                             return;
                         }
-
+                        // Peer代表端点，discoveryNode代表连接
+                        // 这里校验保存连接之前，discoveryNode必须为空，否则报错
                         assert discoveryNode.get() == null : "discoveryNode unexpectedly already set to " + discoveryNode.get();
+                        // 保存连接
                         discoveryNode.set(remoteNode);
-                        // 发送ping命令，检查链接是否可用
+                        // 发送ping命令，验证链接是否可用
                         requestPeers();
                     }
 
@@ -411,21 +426,28 @@ public abstract class PeerFinder {
         }
 
         private void requestPeers() {
+            // 校验是否持有mutex锁，如没有，则报错。好几个地方都反复校验这个锁
             assert holdsLock() : "PeerFinder mutex not held";
+            // 校验ping目标是否处于 【进行中】 ，InFlight=飞行过程中
             assert peersRequestInFlight == false : "PeersRequest already in flight";
+            // 校验探查状态是否激活，如没有，则报错。好几个地方都反复校验探查状态
             assert active;
-
+            // 目标节点，getDiscoveryNode()不为空，证明已连接成功，只是还没有ping通某接口
             final DiscoveryNode discoveryNode = getDiscoveryNode();
             assert discoveryNode != null : "cannot request peers without first connecting";
-
+            // 对方节点不能是 本节点，因为没有必要。当然这里不是通过IP判断是否同一个节点，而是通过节点ID
+            // 也就是说，只要节点ID不同，无论这些节点部署在各机器上，都认为是是不同的节点
             if (discoveryNode.equals(getLocalNode())) {
                 logger.trace("{} not requesting peers from local node", this);
                 return;
             }
 
             logger.trace("{} requesting peers", this);
+            // 请求的状态：代表该请求处于【正在执行中】，InFlight=飞行过程中
             peersRequestInFlight = true;
-
+            // 获取到当前节点已ping通的节点列表，这些节点都是具备选举资格的节点
+            // 然后将这些节点告知 discoveryNode节点，酱紫实现的：扩散功能
+            // 也就是说：一个节点上线，仅配置集群中一个节点信息，即可感知其他节点
             final List<DiscoveryNode> knownNodes = getFoundPeersUnderLock();
 
             final TransportResponseHandler<PeersResponse> peersResponseHandler = new TransportResponseHandler<PeersResponse>() {
@@ -438,20 +460,24 @@ public abstract class PeerFinder {
                 @Override
                 public void handleResponse(PeersResponse response) {
                     logger.trace("{} received {}", Peer.this, response);
+                    // 校验是否持有mutex锁，如没有，则报错。好几个地方都反复校验这个锁
                     synchronized (mutex) {
+                        // 校验探查状态是否激活，如没有，则报错。好几个地方都反复校验探查状态
                         if (active == false) {
                             return;
                         }
-
+                        // 请求的状态：代表该请求处于【结束】，InFlight=飞行过程中
                         peersRequestInFlight = false;
-
+                        // 当发现主节点，则去ping主节点
                         response.getMasterNode().map(DiscoveryNode::getAddress).ifPresent(PeerFinder.this::startProbe);
+                        // 当发现具备选举资格的节点，则去ping这些节点
                         response.getKnownPeers().stream().map(DiscoveryNode::getAddress).forEach(PeerFinder.this::startProbe);
                     }
-
+                    // 说明当前节点 ping通 了主节点
                     if (response.getMasterNode().equals(Optional.of(discoveryNode))) {
                         // Must not hold lock here to avoid deadlock
                         assert holdsLock() == false : "PeerFinder mutex is held in error";
+                        // ping通过主节点，response.getTerm()=主节点的任期
                         onActiveMasterFound(discoveryNode, response.getTerm());
                     }
                 }

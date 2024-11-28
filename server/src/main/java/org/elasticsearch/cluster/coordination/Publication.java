@@ -81,6 +81,8 @@ public abstract class Publication {
         assert cancelled == false;
         cancelled = true;
         if (applyCommitRequest.isPresent() == false) {
+            // applyCommitRequest.isPresent()说明：主节点未收到过半数量的确认，当前状态未执行提交操作
+            // 此时取消任务的话，仅需要将 publicationTargets的状态赋值为： 失败，即可。且这时候的任务100%可取消
             logger.debug("cancel: [{}] cancelled before committing (reason: {})", this, reason);
             // fail all current publications
             final Exception e = new ElasticsearchException("publication cancelled before committing: " + reason);
@@ -256,8 +258,10 @@ public abstract class Publication {
             } else {
                 try {
                     Publication.this.handlePublishResponse(discoveryNode, publishResponse).ifPresent(applyCommit -> {
+                        // 方法handlePublishResponse在等待收到过半数量的确认后，会返回一个非空对象：applyCommit，然后赋值给applyCommitRequest，赋值后则applyCommitRequest.isPresent()为true
                         assert applyCommitRequest.isPresent() == false;
                         applyCommitRequest = Optional.of(applyCommit);
+                        // 到此applyCommitRequest不为空了，applyCommitRequest.isPresent()为true
                         ackListener.onCommit(TimeValue.timeValueMillis(currentTimeSupplier.getAsLong() - startTime));
                         publicationTargets.stream().filter(PublicationTarget::isWaitingForQuorum)
                             .forEach(PublicationTarget::sendApplyCommit);
@@ -270,6 +274,7 @@ public abstract class Publication {
         }
 
         void sendApplyCommit() {
+            //重点，此处要求状态必须为WAITING_FOR_QUORUM，否则不执行提交。这里给取消任务提供的可能：当state不等于WAITING_FOR_QUORUM时，就不执行提交。
             assert state == PublicationTargetState.WAITING_FOR_QUORUM : state + " -> " + PublicationTargetState.SENT_APPLY_COMMIT;
             state = PublicationTargetState.SENT_APPLY_COMMIT;
             assert applyCommitRequest.isPresent();
