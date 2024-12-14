@@ -134,6 +134,7 @@ public class JoinHelper {
             StartJoinRequest::new,
             (request, channel, task) -> {
                 final DiscoveryNode destination = request.getSourceNode();
+                // 发送join请求
                 sendJoinRequest(destination, Optional.of(joinLeaderInTerm.apply(request)));
                 channel.sendResponse(Empty.INSTANCE);
             });
@@ -210,6 +211,8 @@ public class JoinHelper {
     }
 
     public void sendJoinRequest(DiscoveryNode destination, Optional<Join> optionalJoin) {
+        // 向Leader发送JOIN请求:
+        // StartJoin请求处理完毕后调用sendJoinRequest向发起者发送JOIN请求，表示加入集群：
         sendJoinRequest(destination, optionalJoin, () -> {
         });
     }
@@ -267,6 +270,7 @@ public class JoinHelper {
         // 由以下代码可看出，同一个任期，是可以投票给多个候选人的，而Raft算法规定同一任期内，是不能投给多个候选人的
 
         assert destination.isMasterNode() : "trying to join master-ineligible " + destination;
+        // 构建JOIN请求体
         final JoinRequest joinRequest = new JoinRequest(transportService.getLocalNode(), optionalJoin);
         final Tuple<DiscoveryNode, JoinRequest> dedupKey = Tuple.tuple(destination, joinRequest);
         if (pendingOutgoingJoins.add(dedupKey)) {
@@ -274,12 +278,15 @@ public class JoinHelper {
             final String actionName;
             final TransportRequest transportRequest;
             if (Coordinator.isZen1Node(destination)) {
+                // 旧版选举算法：bully
                 actionName = MembershipAction.DISCOVERY_JOIN_ACTION_NAME;
                 transportRequest = new MembershipAction.JoinRequest(transportService.getLocalNode());
             } else {
+                // 新版选举算法：raft
                 actionName = JOIN_ACTION_NAME;
                 transportRequest = joinRequest;
             }
+            // 发送JOIN请求: 请求加入集群
             transportService.sendRequest(destination, actionName, transportRequest,
                 TransportRequestOptions.builder().withTimeout(joinTimeout).build(),
                 new TransportResponseHandler<Empty>() {
@@ -290,6 +297,8 @@ public class JoinHelper {
 
                     @Override
                     public void handleResponse(Empty response) {
+                        // 加入集群成功，但状态尚未变化
+                        // 状态的变化是由主节点通知变更的，主节点发布集群状态时，通过followerchecker，通知其他节点进行角色切换
                         pendingOutgoingJoins.remove(dedupKey);
                         logger.debug("successfully joined {} with {}", destination, joinRequest);
                         lastFailedJoinAttempt.set(null);
@@ -319,6 +328,8 @@ public class JoinHelper {
     public void sendStartJoinRequest(final StartJoinRequest startJoinRequest, final DiscoveryNode destination) {
         assert startJoinRequest.getSourceNode().isMasterNode()
             : "sending start-join request for master-ineligible " + startJoinRequest.getSourceNode();
+        // 发送START_JOIN请求
+        // 注：底层基于netty实现，是异步的
         transportService.sendRequest(destination, START_JOIN_ACTION_NAME,
             startJoinRequest, new TransportResponseHandler<Empty>() {
                 @Override
@@ -328,6 +339,7 @@ public class JoinHelper {
 
                 @Override
                 public void handleResponse(Empty response) {
+                    // 什么也不处理
                     logger.debug("successful response to {} from {}", startJoinRequest, destination);
                 }
 

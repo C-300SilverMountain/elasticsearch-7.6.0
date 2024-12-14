@@ -147,8 +147,10 @@ public class VotingOnlyNodePlugin extends Plugin implements DiscoveryPlugin, Net
                                                             long localAcceptedVersion, VotingConfiguration lastCommittedConfiguration,
                                                             VotingConfiguration lastAcceptedConfiguration, VoteCollection joinVotes) {
             // if local node is voting only, have additional checks on election quorum definition
+            // 判断当前节点是否仅具有投票权限
             if (isVotingOnlyNode(localNode)) {
                 // if all votes are from voting only nodes, do not elect as master (no need to transfer state)
+                // 收集到的投票全部来自（仅具备投票权限的节点）
                 if (joinVotes.nodes().stream().filter(DiscoveryNode::isMasterNode).allMatch(VotingOnlyNodePlugin::isVotingOnlyNode)) {
                     return false;
                 }

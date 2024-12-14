@@ -79,6 +79,7 @@ public class PreVoteCollector {
      * @return the pre-voting round, which can be closed to end the round early.
      */
     public Releasable start(final ClusterState clusterState, final Iterable<DiscoveryNode> broadcastNodes) {
+        // 预选举过程，term并没有 +1
         PreVotingRound preVotingRound = new PreVotingRound(clusterState, state.v2().getCurrentTerm());
         preVotingRound.start(broadcastNodes);
         return preVotingRound;
@@ -101,18 +102,26 @@ public class PreVoteCollector {
     }
     // 选民 处理【预投票邀请】，通常该邀请是远程候选者发过来的
     private PreVoteResponse handlePreVoteRequest(final PreVoteRequest request) {
+        //https://www.cnblogs.com/shanml/p/16684887.html
+        // 1、更新自己收到过的最大的Term
+        // 注：如果请求中的Term比自己的Term大并且当前节点是Leader节点，意味着当前的Leader可能已经过期，其他节点已经开始竞选Leader，所以此时当前节点需要放弃Leader的身份，重新发起选举。
         updateMaxTermSeen.accept(request.getCurrentTerm());
 
+        // 2、根据当前节点记录的Leader信息决定是否投票给发起者，然后向发起者返回投票响应信息：
+        // 如果当前节点记录的集群Leader为空，同意投票给发起者。
+        // 如果当前节点记录的集群Leader不为空，但是与本次发起的节点一致，同样同意投票。
+        // 如果当前节点记录的集群Leader不为空，但是与本次发起的节点不同，拒绝投票给发起者。
         Tuple<DiscoveryNode, PreVoteResponse> state = this.state;
+        // 极端情况 state是有可能为空的，即一直没有执行update方法
         assert state != null : "received pre-vote request before fully initialised";
 
         final DiscoveryNode leader = state.v1();
         final PreVoteResponse response = state.v2();
-
+        // 如果leader为空，表示还没有Leader节点，返回响应同意发起投票的节点成为leader
         if (leader == null) {
             return response;
         }
-
+        // 如果leader不为空，但是与发起请求的节点是同一个节点，同样支持发起请求的节点成为leader
         if (leader.equals(request.getSourceNode())) {
             // This is a _rare_ case where our leader has detected a failure and stepped down, but we are still a follower. It's possible
             // that the leader lost its quorum, but while we're still a follower we will not offer joins to any other node so there is no
@@ -121,7 +130,7 @@ public class PreVoteCollector {
             // to also detect its failure.
             return response;
         }
-
+        // 其他情况，表示已经存在leader，拒绝投票请求
         throw new CoordinationStateRejectedException("rejecting " + request + " as there is already a leader");
     }
 
@@ -147,6 +156,8 @@ public class PreVoteCollector {
         void start(final Iterable<DiscoveryNode> broadcastNodes) {
             assert StreamSupport.stream(broadcastNodes.spliterator(), false).noneMatch(Coordinator::isZen1Node) : broadcastNodes;
             logger.debug("{} requesting pre-votes from {}", this, broadcastNodes);
+            // 预选举过程，term并没有 +1
+            // 将请求发送到REQUEST_PRE_VOTE_ACTION_NAME，只要集群中不存在主节点 或 当前节点是主节点，都会得到正确的响应
             broadcastNodes.forEach(n -> transportService.sendRequest(n, REQUEST_PRE_VOTE_ACTION_NAME, preVoteRequest,
                 new TransportResponseHandler<PreVoteResponse>() {
                     @Override
@@ -186,16 +197,17 @@ public class PreVoteCollector {
                 logger.debug("{} is closed, ignoring {} from {}", this, response, sender);
                 return;
             }
-
+            // 处理最大Term
             updateMaxTermSeen.accept(response.getCurrentTerm());
-
+            // 预选举term并没有+1，所以这里的term理应相等
+            // 如果响应中的Term大于当前节点的Term， 或者Term相等但是版本号大于当前节点的版本号
             if (response.getLastAcceptedTerm() > clusterState.term()
                 || (response.getLastAcceptedTerm() == clusterState.term()
                 && response.getLastAcceptedVersion() > clusterState.getVersionOrMetaDataVersion())) {
                 logger.debug("{} ignoring {} from {} as it is fresher", this, response, sender);
                 return;
             }
-
+            // 记录得到的投票
             preVotesReceived.put(sender, response);
 
             // create a fake VoteCollection based on the pre-votes and check if there is an election quorum
@@ -215,12 +227,15 @@ public class PreVoteCollector {
                 return;
             }
 
+            // 到此，表示收到过半投票，接下来启动选举流程
+            // electionStarted防止多次执行选举流程
             if (electionStarted.compareAndSet(false, true) == false) {
                 logger.debug("{} added {} from {} but election has already started", this, response, sender);
                 return;
             }
 
             logger.debug("{} added {} from {}, starting election", this, response, sender);
+            // 开始选举
             startElection.run();
         }
 

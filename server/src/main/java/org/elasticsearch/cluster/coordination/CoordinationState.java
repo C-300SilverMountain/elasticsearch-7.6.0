@@ -169,12 +169,15 @@ public class CoordinationState {
 
     /**
      * May be safely called at any time to move this instance to a new term.
-     *
+     * handleStartJoin方法中只要请求中的Term大于当前节点的Term，都会继续往下进行，最后返回一个Join对象，这意味着当前节点同意为发起者进行投票，
+     * 也就是说Elasticsearch允许一个节点多次进行投票，并没有按照Raft协议中的规定每个任期内只能给一个节点投票。
      * @param startJoinRequest The startJoinRequest, specifying the node requesting the join.
      * @return A Join that should be sent to the target node of the join.
      * @throws CoordinationStateRejectedException if the arguments were incompatible with the current state of this object.
      */
     public Join handleStartJoin(StartJoinRequest startJoinRequest) {
+        // 在handleStartJoin方法中从请求中获取Term信息并更新到当前节点的CurrentTerm中：
+        //如果StartJoin请求中的Term小于或者等于当前节点的Term，抛出异常；
         if (startJoinRequest.getTerm() <= getCurrentTerm()) {
             logger.debug("handleStartJoin: ignoring [{}] as term provided is not greater than current term [{}]",
                 startJoinRequest, getCurrentTerm());
@@ -195,8 +198,9 @@ public class CoordinationState {
             }
             logger.debug("handleStartJoin: discarding {}: {}", joinVotes, reason);
         }
-
+        //更新当前节点的CurrentTerm为StartJoin请求中的Term；
         persistedState.setCurrentTerm(startJoinRequest.getTerm());
+        // 判断当前节点的Term是否与startJoin请求的一致
         assert getCurrentTerm() == startJoinRequest.getTerm();
         lastPublishedVersion = 0;
         lastPublishedConfiguration = getLastAcceptedConfiguration();
@@ -204,7 +208,7 @@ public class CoordinationState {
         electionWon = false;
         joinVotes = new VoteCollection();
         publishVotes = new VoteCollection();
-
+        //返回一个Join对象，里面记录当前节点加入集群的信息，包括当前节点信息、发送startJoin请求的节点（选举为Leader的节点），当前节点的Term，当前节点上一次接受的Term、当前节点上一次接受的版本；
         return new Join(localNode, startJoinRequest.getSourceNode(), getCurrentTerm(), getLastAcceptedTerm(),
             getLastAcceptedVersionOrMetaDataVersion());
     }
@@ -231,15 +235,16 @@ public class CoordinationState {
             logger.debug("handleJoin: ignored join as term was not incremented yet after reboot");
             throw new CoordinationStateRejectedException("ignored join as term has not been incremented yet after reboot");
         }
-
+        // 获取上一次的Term
         final long lastAcceptedTerm = getLastAcceptedTerm();
+        // 如果请求中的上一次接受的Term大于当前节点的lastAcceptedTerm，抛出异常
         if (join.getLastAcceptedTerm() > lastAcceptedTerm) {
             logger.debug("handleJoin: ignored join as joiner has a better last accepted term (expected: <=[{}], actual: [{}])",
                 lastAcceptedTerm, join.getLastAcceptedTerm());
             throw new CoordinationStateRejectedException("incoming last accepted term " + join.getLastAcceptedTerm() +
                 " of join higher than current last accepted term " + lastAcceptedTerm);
         }
-
+        // 对比版本
         if (join.getLastAcceptedTerm() == lastAcceptedTerm && join.getLastAcceptedVersion() > getLastAcceptedVersionOrMetaDataVersion()) {
             logger.debug(
                 "handleJoin: ignored join as joiner has a better last accepted version (expected: <=[{}], actual: [{}]) in term {}",
@@ -257,15 +262,16 @@ public class CoordinationState {
             logger.debug("handleJoin: rejecting join since this node has not received its initial configuration yet");
             throw new CoordinationStateRejectedException("rejecting join since this node has not received its initial configuration yet");
         }
-
+        // 记录JOIN投票
         boolean added = joinVotes.addJoinVote(join);
         boolean prevElectionWon = electionWon;
+        // 判断是否得到了大多数投票，这里会更新electionWon的值
         electionWon = isElectionQuorum(joinVotes);
         assert !prevElectionWon || electionWon : // we cannot go from won to not won
             "locaNode= " + localNode + ", join=" + join + ", joinVotes=" + joinVotes;
         logger.debug("handleJoin: added join {} from [{}] for election, electionWon={} lastAcceptedTerm={} lastAcceptedVersion={}", join,
             join.getSourceNode(), electionWon, lastAcceptedTerm, getLastAcceptedVersion());
-
+        // 如果得到了大多数投票并且上一次没有选举为Leader
         if (electionWon && prevElectionWon == false) {
             logger.debug("handleJoin: election won in term [{}] with {}", getCurrentTerm(), joinVotes);
             lastPublishedVersion = getLastAcceptedVersion();

@@ -127,7 +127,7 @@ public abstract class PeerFinder {
             active = true;
             this.lastAcceptedNodes = lastAcceptedNodes;
             leader = Optional.empty();
-            // 跟具备master参选资格的节点建立起链接，当链接成功个数满足过半时，立即就发起选举，没必要等所有链接建立完成后，才发起选举流程。
+            // 跟具备master参选资格的节点建立起链接，当链接成功个数满足过半时，立即就发起预选举，没必要等所有链接建立完成后，才发起预选举流程。
             handleWakeUp(); // return value discarded: there are no known peers, so none can be disconnected
         }
         // 触发onFoundPeersUpdated()1次
@@ -245,12 +245,20 @@ public abstract class PeerFinder {
 
     private List<DiscoveryNode> getFoundPeersUnderLock() {
         assert holdsLock() : "PeerFinder mutex not held";
+        // 此处要求Peer的discoveryNode属性不为空，只有建立连接成功，Peer的discoveryNode才不会为空
+        // 也就是，统计过半时，最低要求是 过半节点能连接成功即可发起选举
+        // 此处加了distinct()，说明存在重复数据，重复数据何来？在handleWakeUp方法中，两次调用startProbe
+        // 第一次：根据集群状态中的节点信息执行startProbe
+        // 第二次：根据配置文件中的节点信息执行startProbe
+        // 而集群状态中的节点信息 与 配置文件中的节点信息 存在相同数据，如此就会导致 peersByAddress存在重复数据
         return peersByAddress.values().stream()
             .map(Peer::getDiscoveryNode).filter(Objects::nonNull).distinct().collect(Collectors.toList());
     }
 
     private Peer createConnectingPeer(TransportAddress transportAddress) {
+        // 创建peer,代表远程端点，peer内部有DiscoveryNode属性，代表与远程端点的链接
         Peer peer = new Peer(transportAddress);
+        // 建立链接：建立成功后，确保能ping通，所以establishConnection包含了两个步骤：一：建立链接；二：ping接口
         peer.establishConnection();
         return peer;
     }
@@ -260,7 +268,7 @@ public abstract class PeerFinder {
      */
     private boolean handleWakeUp() {
         assert holdsLock() : "PeerFinder mutex not held";
-
+        //peersByAddress为端点列表，遍历此列表，逐个建立与本端点的链接，如建立失败，则从端点列表中删除
         final boolean peersRemoved = peersByAddress.values().removeIf(Peer::handleWakeUp);
         // 假如探查状态为false，则返回
         if (active == false) {
@@ -268,12 +276,13 @@ public abstract class PeerFinder {
             return peersRemoved;
         }
         // 从集群状态中解析出：具有选举资格的节点，初次启动，肯定为空，所以加了一个步骤：resolveConfiguredHosts：从配置文件中读取
-        // 如果某个节点在集群中运行过一段时间后，发送重启,或主节点掉线/宕机，那么大概率通过此步骤就触发重新选举，而不会走到resolveConfiguredHosts函数
+        // 如果某个节点在集群中运行过一段时间后，发生重启,或主节点掉线/宕机，那么大概率通过此步骤就触发重新选举，而不会走到resolveConfiguredHosts函数
         logger.trace("probing master nodes from cluster state: {}", lastAcceptedNodes);
+        // 遍历所有具备选举资格的节点，并执行探测（Probe=探测）,其实就是ping对方，当ping通的节点数 过半，即执行预选举
         for (ObjectCursor<DiscoveryNode> discoveryNodeObjectCursor : lastAcceptedNodes.getMasterNodes().values()) {
             startProbe(discoveryNodeObjectCursor.value.getAddress());
         }
-
+        // startProbe调用了两轮，对于某个节点，可能存在多次执行连接操作 => 冗余操作了
         configuredHostsResolver.resolveConfiguredHosts(providedAddresses -> {
             synchronized (mutex) {
                 lastResolvedAddresses = providedAddresses;
@@ -328,13 +337,14 @@ public abstract class PeerFinder {
             logger.trace("startProbe({}) not probing local node", transportAddress);
             return;
         }
-        // 创建与目标节点的连接，并保存到 peersByAddress,注：peersByAddress保存的是：具备选举资格的节点
+        // 创建与远程节点的链接，并保存到 peersByAddress,注：peersByAddress保存的是：具备选举资格的节点
         peersByAddress.computeIfAbsent(transportAddress, this::createConnectingPeer);
     }
 
     private class Peer {
         private final TransportAddress transportAddress;
         private SetOnce<DiscoveryNode> discoveryNode = new SetOnce<>();
+        // 这个标志表示：正在执行ping的过程。因为是异步的，所以加一个标识，表示正在执行ping过程当中
         private volatile boolean peersRequestInFlight;
 
         Peer(TransportAddress transportAddress) {
@@ -471,9 +481,11 @@ public abstract class PeerFinder {
                         // 当发现主节点，则去ping主节点
                         response.getMasterNode().map(DiscoveryNode::getAddress).ifPresent(PeerFinder.this::startProbe);
                         // 当发现具备选举资格的节点，则去ping这些节点
+                        // response是远程节点响应信息，包含了远程节点知道的集群中所有其他节点的信息
+                        // 如此当前节点已拿到了集群中所有其他节点的信息，并与他们建立链接
                         response.getKnownPeers().stream().map(DiscoveryNode::getAddress).forEach(PeerFinder.this::startProbe);
                     }
-                    // 说明当前节点 ping通 了主节点
+                    // 说明当前节点 ping通 了远程主节点
                     if (response.getMasterNode().equals(Optional.of(discoveryNode))) {
                         // Must not hold lock here to avoid deadlock
                         assert holdsLock() == false : "PeerFinder mutex is held in error";
@@ -484,6 +496,8 @@ public abstract class PeerFinder {
 
                 @Override
                 public void handleException(TransportException exp) {
+                    // 从异常处理可以看出：即使ping失败了，也不做任何处理。换句话说：无论ping通与否，都不影响选举。
+                    // 只要建立连接成功，且过半数，即可执行选举。无须考虑ping通与否
                     peersRequestInFlight = false;
                     logger.debug(new ParameterizedMessage("{} peers request failed", Peer.this), exp);
                 }
@@ -497,6 +511,7 @@ public abstract class PeerFinder {
             final TransportRequest transportRequest;
             final TransportResponseHandler<?> transportResponseHandler;
             if (isZen1Node(discoveryNode)) {
+                // 旧版选举算法：bully
                 actionName = UnicastZenPing.ACTION_NAME;
                 transportRequest = new UnicastZenPing.UnicastPingRequest(1, ZenDiscovery.PING_TIMEOUT_SETTING.get(settings),
                     new ZenPing.PingResponse(createDiscoveryNodeWithImpossiblyHighId(getLocalNode()), null,
@@ -515,6 +530,7 @@ public abstract class PeerFinder {
                     return new PeersResponse(optionalMasterNode, discoveredNodes, 0L);
                 }, UnicastZenPing.UnicastPingResponse::new);
             } else {
+                // 新版选举算法：raft
                 actionName = REQUEST_PEERS_ACTION_NAME;
                 transportRequest = new PeersRequest(getLocalNode(), knownNodes);
                 transportResponseHandler = peersResponseHandler;

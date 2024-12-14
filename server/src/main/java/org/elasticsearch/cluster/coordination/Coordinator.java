@@ -354,11 +354,15 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
     }
 
     private void closePrevotingAndElectionScheduler() {
+        // 以下函数干的是同一件事：关闭预选举
+        // 预选举包含两大部分：循环体+线程池
+
+        // 关闭预选举循环体
         if (prevotingRound != null) {
             prevotingRound.close();
             prevotingRound = null;
         }
-
+        // 关闭预选举线程
         if (electionScheduler != null) {
             electionScheduler.close();
             electionScheduler = null;
@@ -367,8 +371,10 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
 
     private void updateMaxTermSeen(final long term) {
         synchronized (mutex) {
+            //比较当前节点收到过的最大的Term与请求中的Term，选择较大的那个作为maxTermSeen的值进行更新；
             maxTermSeen = Math.max(maxTermSeen, term);
             final long currentTerm = getCurrentTerm();
+            //如果当前节点是Leader并且请求中的Term大于当前节点的Term，表示当前节点的信息可能已经过期，需要放弃当前的Leader角色，重新发起选举：
             if (mode == Mode.LEADER && maxTermSeen > currentTerm) {
                 // Bump our term. However if there is a publication in flight then doing so would cancel the publication, so don't do that
                 // since we check whether a term bump is needed at the end of the publication too.
@@ -377,7 +383,9 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
                 } else {
                     try {
                         logger.debug("updateMaxTermSeen: maxTermSeen = {} > currentTerm = {}, bumping term", maxTermSeen, currentTerm);
+                        //调用ensureTermAtLeast检查Term，确保是最新的Term，在ensureTermAtLeast方法中会判断，如果当前节点Term小于请求中的Term将当前节点转为候选者；
                         ensureTermAtLeast(getLocalNode(), maxTermSeen);
+                        //调用startElection方法重新进行选举；
                         startElection();
                     } catch (Exception e) {
                         logger.warn(new ParameterizedMessage("failed to bump term to {}", maxTermSeen), e);
@@ -390,6 +398,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
 
     private void startElection() {
         synchronized (mutex) {
+            // 在成为Leader之前，需要向集群中的所有节点发送StartJoin请求，邀请节点加入集群：
             // The preVoteCollector is only active while we are candidate, but it does not call this method with synchronisation, so we have
             // to check our mode again here.
             if (mode == Mode.CANDIDATE) {
@@ -398,20 +407,24 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
                     return;
                 }
                 // term任期 + 1，邀请其他节点加入集群（注：这里是邀请其他节点加入集群,term才+1，而预投票，term是不执行 +1）
+                // 创建StartJoin请求，这里可以看到在请求中的Term，设置为最大Term + 1
                 final StartJoinRequest startJoinRequest
                     = new StartJoinRequest(getLocalNode(), Math.max(getCurrentTerm(), maxTermSeen) + 1);
                 logger.debug("starting election with {}", startJoinRequest);
+                // StartJoin请求表示邀请节点加入集群信息，接收者收到请求后会向发起者发送JOIN请求表示进行加入，所以发起者对StartJoin的响应不需要做什么处理，等待接收者发送JOIN请求即可：
+                // getDiscoveredNodes()包含本节点，相当于自个投给自个一票
                 getDiscoveredNodes().forEach(node -> {
-                    // 7.0之前使用的是：legacy-zen
-                    // 7.0之后才使用Raft
+                    // 7.0之前使用的是：bully
+                    // 7.0之后才使用: Raft
                     // 这里是保证是本市的市民（同样使用Raft算法的节点）
                     if (isZen1Node(node) == false) {
                         // 开始演讲：邀请市民（其他节点）投票给我（本节点），注：仅仅发送请求，至于投票给我与否，下面的代码是未能感知的
-                        // 那我（本节点）如何感知，市民（node）是否投票给我？
+                        // 那我（本节点）如何感知，市民（node）是否投票给我？如果市民觉得我（本节点）OK，那么他会主动调用JOIN_ACTION_NAME，来通知我
+                        // 调用sendStartJoinRequest发送StartJoin请求
                         joinHelper.sendStartJoinRequest(startJoinRequest, node);
                         // 执行以上代码，流程大致如下：
                         // 我发送投票邀请 => START_JOIN_ACTION_NAME
-                        // 市民接收到请邀请后，通过调用接口JOIN_ACTION_NAME，来通过我投票
+                        // 市民接收到请邀请后，通过调用接口JOIN_ACTION_NAME，表示支持我
                         // 调用接口JOIN_ACTION_NAME完成后，市民才会结束投票邀请的请求
                     }
                 });
@@ -451,6 +464,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
 
     private Optional<Join> ensureTermAtLeast(DiscoveryNode sourceNode, long targetTerm) {
         assert Thread.holdsLock(mutex) : "Coordinator mutex not held";
+        // 判断当前节点Term是否小于请求中的Term
         if (getCurrentTerm() < targetTerm) {
             return Optional.of(joinLeaderInTerm(new StartJoinRequest(sourceNode, targetTerm)));
         }
@@ -460,9 +474,11 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
     private Join joinLeaderInTerm(StartJoinRequest startJoinRequest) {
         synchronized (mutex) {
             logger.debug("joinLeaderInTerm: for [{}] with term {}", startJoinRequest.getSourceNode(), startJoinRequest.getTerm());
+            // 处理StartJoin请求
             final Join join = coordinationState.get().handleStartJoin(startJoinRequest);
             lastJoin = Optional.of(join);
             peerFinder.setCurrentTerm(getCurrentTerm());
+            // 如果节点不是CANDIDATE，转为CANDIDATE
             // 如果当前节点是Leader，仍然收到其他节点的投票邀请，那么当前节点就执行“退位”（becomeCandidate），进行重新选举
             if (mode != Mode.CANDIDATE) {
                 // https://www.easyice.cn/archives/382
@@ -533,6 +549,11 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
         });
     }
 
+    //processJoinRequest处理逻辑如下：
+    // 调用updateMaxTermSeen更新收到最大的Term；
+    // 判断是否已经成功竞选为Leader，因为发起者会收到多个节点发送的JOIN请求，每次处理JOIN请求会判断是否获取了大多数投票，并将结果更新到CoordinationState的electionWon变量中，为了不重复调用becomeLeader，这里先获取最近一次更新的值，记为prevElectionWon，用于判断后面是否需要调用becomeLeader成为Leader；
+    // 调用handleJoin进行处理，处理的时候会判断是否获取了大多数的投票，并更新CoordinationState中electionWon的值；
+    // 再次从CoordinationState中获取electionWon值进行判断，如果prevElectionWon为false但是当前的electionWon为true，也就是之前未收到大多数投票的，但是处理当前的JOIN请求时达到了大多数投票，成功竞选为Leader，则调用becomeLeader成为Leader；
     private void processJoinRequest(JoinRequest joinRequest, JoinHelper.JoinCallback joinCallback) {
         final Optional<Join> optionalJoin = joinRequest.getOptionalJoin();
         synchronized (mutex) {
@@ -543,6 +564,8 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
             optionalJoin.ifPresent(this::handleJoin);
             joinAccumulator.handleJoinRequest(joinRequest.getSourceNode(), joinCallback);
             // 当前投票未加入前，未赢得投票（过半），但加入后，便胜出（满足过半），则切换角色成为：Leader
+
+            //当节点收到了大多数投票后，就会调用becomeLeader转为Leader，这里会将节点由CANDIDATE转为LEADER角色，然后调用preVoteCollector的update更新Term和Leader节点信息：
             if (prevElectionWon == false && coordState.electionWon()) {
                 becomeLeader("handleJoinRequest");
             }
@@ -559,10 +582,10 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
             // 切换成【候选者】状态
             mode = Mode.CANDIDATE;
             // 取消待执行的 集群状态发布任务
-            // 当集群竞选比较激烈时，假如节点A已胜出选举，但还没有发布状态，此时其他节点又重新发起选举，紧接着节点A收到投票邀请，于是节点A就降级切换成候选节点，且通过以下代码取消状态发布
-            // 如此，反复选举，甚至一直持续很长时间。为了解决此类问题，增加了延迟选举机制，即不立即执行选举，而是采用每个节点延迟执行选举任务，延迟时间随机
+            // 当集群竞选比较激烈时，假如节点A已胜出选举，状态已在任务列表中但还没有发出，此时其他节点又重新发起选举，紧接着节点A收到投票邀请，于是节点A就降级切换成候选节点，就会通过以下代码取消状态发布
+            // 如此，反复选举，甚至一直持续很长时间。为了解决此类问题，增加了延迟选举机制，即不立即执行选举，而是采用每个节点延迟执行选举任务，且延迟时间随机
             cancelActivePublication("become candidate: " + method);
-            // 节点初次启动，创建的是： InitialJoinAccumulator，指定为：初始角色，通过选举后，才能切换其他角色
+            // 节点初次启动，创建的是： InitialJoinAccumulator，指定为：初始角色
             // 又或者，已运行一段时间的节点，发起重选举，此时也会切换成候选人，再执行选举流程
             // 除了候选者角色，其他角色并没有重写此函数，但候选者无法在此调用CandidateJoinAccumulator.close，因此此处实际跑 【空函数】
             // 值得注意的是：候选人角色是临时状态，一旦选主成功，所有节点要么是追随者，要么是主节点，也就是说，候选人角色仅在选主过程中才会出现，其他情况都不存在候选人角色
@@ -598,13 +621,16 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
                 });
             }
         }
+        // 清空预投票信息，尤其关注主节点信息
         // 更新PreVoteCollector里面记录的leader节点和Term信息，这里还没有选举出leader，所以传入的是null
         preVoteCollector.update(getPreVoteResponse(), null);
     }
 
     void becomeLeader(String method) {
         assert Thread.holdsLock(mutex) : "Coordinator mutex not held";
+        // 是否是CANDIDATE
         assert mode == Mode.CANDIDATE : "expected candidate but was " + mode;
+        // // 是否有Master角色权限
         assert getLocalNode().isMasterNode() : getLocalNode() + " became a leader but is not master-eligible";
 
         logger.debug("{}: coordinator becoming LEADER in term {} (was {}, lastKnownLeader was [{}])",
@@ -613,6 +639,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
         mode = Mode.LEADER;
         // 发布集群状态
         joinAccumulator.close(mode);
+        // 设置为LeaderJoinAccumulator
         joinAccumulator = joinHelper.new LeaderJoinAccumulator();
 
         lastKnownLeader = Optional.of(getLocalNode());
@@ -621,6 +648,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
         clusterFormationFailureHelper.stop();
         // 关闭递归竞选任务,阻止新的选举
         closePrevotingAndElectionScheduler();
+        // 更新Leader信息和Term信息
         preVoteCollector.update(getPreVoteResponse(), getLocalNode());
 
         assert leaderChecker.leader() == null : leaderChecker.leader();
@@ -764,7 +792,8 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
     public void startInitialJoin() {
         // 如果当前节点是候选者状态，是不会执行becomeCandidate的，而是直接执行scheduleUnconfiguredBootstrap进行选举。
         // 因为如果是非候选者状态，才需要执行必要状态清零操作
-        // 注：无论是何种方式触发的选举，最终的会调用startElectionScheduler启动选举，该方法并不会立即执行选举，而是采用随机延迟执行，酱紫可避免不必要的竞争
+        // 注：无论是何种方式触发的选举，最终的会调用startElectionScheduler启动选举，该方法并不会立即执行选举，而是采用随机递增延迟执行，酱紫可避免不必要的竞争
+        // 记住是 随机递增延迟，避免撞车
         synchronized (mutex) {
             // becomeCandidate：先进行必要的清零操作，再进入选主流程
             becomeCandidate("startInitialJoin");
@@ -1013,6 +1042,15 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
         return node.isMasterNode() && coordinationState.get().containsJoinVoteFor(node) == false;
     }
 
+    //handleJoin的处理过程：
+    // https://www.cnblogs.com/shanml/p/16684887.html
+    //首先调用ensureTermAtLeast方法确保当前节点是最新的Term，ensureTermAtLeast前面已经讲过，会确保当前的节点Term是最新，如果已经是最新什么也不做，如果不是将创建StartJoinRequest然后调用joinLeaderInTerm方法，joinLeaderInTerm方法会返回一个JOIN信息，表示当前节点要加入一个集群的信息；
+    //
+    //在节点发送StartJoin请求时可知，对请求中的Term进行了加1但是节点自己的Term并未更新，所以首次收到发回的JOIN请求进入handleJoin时，JOIN请求中的Term会比当前节点的Term大1，那么ensureTermAtLeast就会返回一个JOIN信息，然后再次调用handleJoin处理JOIN请求，这里可以理解为节点向自己发了一个JOIN请求（通过创建JOIN对象的方式），给自己投一票；
+    //
+    //上面说过CoordinationState中electionWon记录了是否已经选举为Leader，所以这里进行判断，如果已经被选举成为了Leader，调用handleJoinIgnoringExceptions处理JOIN请求，这个方法底层还是调用CoordinationState的handleJoin进行处理，只不过在外层进行了异常捕捉，会忽略抛出的异常，因为节点之前已经成功选举了Leader，所以本次JION请求处理无关紧要，为了不让异常影响后续的流程，所以对异常进行一个捕捉；
+    //
+    //如果还未成功选举为Leader，调用CoordinationState的handleJoin处理请求，与第一步不一样的是这个不会对异常进行捕捉，因为此时还没成为Leader，如果有异常信息需要抛出；
     private void handleJoin(Join join) {
         synchronized (mutex) {
             // 该方法非常重要，es并没有完全按照Raft算法规定，来约束同一个term内只能投票一次，反而是在es中同一个term，可以投票多次。则在同一个term中可能发生以下多主情况：
@@ -1022,7 +1060,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
             // 针对以上情况，Node2成为领导后，竟然还收到Node3投票邀请，此时Node2会退位，成为候选者重新走投票流程。那么退位就在ensureTermAtLeast方法中有所体验
             // 参考: https://www.easyice.cn/archives/332
             ensureTermAtLeast(getLocalNode(), join.getTerm()).ifPresent(this::handleJoin);
-
+            // 如果已经被选举为Leader
             if (coordinationState.get().electionWon()) {
                 // If we have already won the election then the actual join does not matter for election purposes, so swallow any exception
                 final boolean isNewJoinFromMasterEligibleNode = handleJoinIgnoringExceptions(join);
@@ -1035,7 +1073,9 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
                     scheduleReconfigurationIfNeeded();
                 }
             } else {
+                // 如果还未为成为Leader
                 // 重点：统计投票的逻辑
+                //在CoordinationState的handleJoin中，首先会对Term和版本信息进行一系列的校验，如果校验通过，记录收到的JOIN请求个数，表示当前已经成功收到的投票数，然后调用isElectionQuorum判断是否获得了大多数的投票，也就是获得的投票数达到了Quorum，并将值更新到electionWon中：
                 coordinationState.get().handleJoin(join); // this might fail and bubble up the exception
             }
         }
@@ -1066,6 +1106,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
 
     private List<DiscoveryNode> getDiscoveredNodes() {
         final List<DiscoveryNode> nodes = new ArrayList<>();
+        // 将本节点加入到 nodes列表中
         nodes.add(getLocalNode());
         // peerFinder 保存的是：具备选举资格的节点
         peerFinder.getFoundPeers().forEach(nodes::add);
@@ -1208,6 +1249,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
         // ping通了主节点
         @Override
         protected void onActiveMasterFound(DiscoveryNode masterNode, long term) {
+            // 注意：到此说明，本节点 ping 通了主节点，即会尝试加入集群。但并没有立即主动取消当前节点的选举流程，而是任由其自动结束，或者等加入集群成功后，主动关闭选举流程
             synchronized (mutex) {
                 // masterNode：主节点；term：主节点任期
                 ensureTermAtLeast(masterNode, term);
@@ -1228,24 +1270,27 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
         @Override
         protected void onFoundPeersUpdated() {
             synchronized (mutex) {
+                // 从peer中获取DiscoveryNode属性，只有与对方节点连接成功，DiscoveryNode属性才不为空
                 final Iterable<DiscoveryNode> foundPeers = getFoundPeers();
                 if (mode == Mode.CANDIDATE) {
+                    // 收集投票，用于统计是否过半
                     final VoteCollection expectedVotes = new VoteCollection();
                     foundPeers.forEach(expectedVotes::addVote);
                     expectedVotes.addVote(Coordinator.this.getLocalNode());
                     // 判断具有参与选主资格的节点总数是否过半，集群中具备选举资格的 节点数量 是否过半
                     final boolean foundQuorum = coordinationState.get().isElectionQuorum(expectedVotes);
 
-                    // 过半则执行 选举流程
+                    // 过半则执行 预选举流程
                     if (foundQuorum) {
-                        // electionScheduler == null: 避免重复执行onFoundPeersUpdated()
-                        // 选举流程中，多次执行onFoundPeersUpdated，那么通常以下代码控制仅允许首次可执行startElectionScheduler，
+                        // electionScheduler == null的作用: 避免重复执行onFoundPeersUpdated()
+                        // 选举流程中，多次执行onFoundPeersUpdated，那么通常以下代码控制仅允许执行一次startElectionScheduler，
                         // 一旦执行过startElectionScheduler，electionScheduler就不为空，后续的调用就不会重复执行startElectionScheduler
                         if (electionScheduler == null) {
                             // 开始去演讲拉票
                             startElectionScheduler();
                         }
                     } else {
+                        // 关闭预选举
                         closePrevotingAndElectionScheduler();
                     }
                 }
