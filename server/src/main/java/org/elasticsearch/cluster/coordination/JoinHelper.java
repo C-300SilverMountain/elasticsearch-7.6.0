@@ -268,6 +268,7 @@ public class JoinHelper {
     public void sendJoinRequest(DiscoveryNode destination, Optional<Join> optionalJoin, Runnable onCompletion) {
         // 以下是：市民发出投票流程
         // 由以下代码可看出，同一个任期，是可以投票给多个候选人的，而Raft算法规定同一任期内，是不能投给多个候选人的
+        // 这就意味着，可能出现多主情况，首先，es采用“后来者居上”来解决此问题，也就是说前者会自动退位，让后来者当王
 
         assert destination.isMasterNode() : "trying to join master-ineligible " + destination;
         // 构建JOIN请求体
@@ -328,7 +329,7 @@ public class JoinHelper {
     public void sendStartJoinRequest(final StartJoinRequest startJoinRequest, final DiscoveryNode destination) {
         assert startJoinRequest.getSourceNode().isMasterNode()
             : "sending start-join request for master-ineligible " + startJoinRequest.getSourceNode();
-        // 发送START_JOIN请求
+        // 发送START_JOIN请求：候选节点向 其他节点（具备选举资格）发送邀请投票请求
         // 注：底层基于netty实现，是异步的
         transportService.sendRequest(destination, START_JOIN_ACTION_NAME,
             startJoinRequest, new TransportResponseHandler<Empty>() {
@@ -339,7 +340,8 @@ public class JoinHelper {
 
                 @Override
                 public void handleResponse(Empty response) {
-                    // 什么也不处理
+                    // 什么也不处理，从这里可看出：投票邀请发出后，本节点什么也不处理
+                    // 市民收到邀请后，如果愿意投票给本节点，会主动调用本节点的JOIN_ACTION_NAME接口来投票给本节点
                     logger.debug("successful response to {} from {}", startJoinRequest, destination);
                 }
 

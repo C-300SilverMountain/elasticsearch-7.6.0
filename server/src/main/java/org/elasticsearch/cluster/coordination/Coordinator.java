@@ -421,11 +421,11 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
                         // 开始演讲：邀请市民（其他节点）投票给我（本节点），注：仅仅发送请求，至于投票给我与否，下面的代码是未能感知的
                         // 那我（本节点）如何感知，市民（node）是否投票给我？如果市民觉得我（本节点）OK，那么他会主动调用JOIN_ACTION_NAME，来通知我
                         // 调用sendStartJoinRequest发送StartJoin请求
+                        // 注意，这里term已+1，后面本节点收到的投票请求joinRequest也是该值
                         joinHelper.sendStartJoinRequest(startJoinRequest, node);
                         // 执行以上代码，流程大致如下：
                         // 我发送投票邀请 => START_JOIN_ACTION_NAME
                         // 市民接收到请邀请后，通过调用接口JOIN_ACTION_NAME，表示支持我
-                        // 调用接口JOIN_ACTION_NAME完成后，市民才会结束投票邀请的请求
                     }
                 });
             }
@@ -497,6 +497,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
      * @param joinCallback
      */
     private void handleJoinRequest(JoinRequest joinRequest, JoinHelper.JoinCallback joinCallback) {
+        // 注：这里收到的term已是+1
         assert Thread.holdsLock(mutex) == false;
         assert getLocalNode().isMasterNode() : getLocalNode() + " received a join but is not master-eligible";
         logger.trace("handleJoinRequest: as {}, handling {}", mode, joinRequest);
@@ -1072,6 +1073,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
                 if (isNewJoinFromMasterEligibleNode && establishedAsMaster && publicationInProgress() == false) {
                     scheduleReconfigurationIfNeeded();
                 }
+
             } else {
                 // 如果还未为成为Leader
                 // 重点：统计投票的逻辑
