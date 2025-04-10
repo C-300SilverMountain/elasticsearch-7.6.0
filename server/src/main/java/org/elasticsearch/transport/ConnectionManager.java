@@ -48,7 +48,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class ConnectionManager implements Closeable {
 
     private static final Logger logger = LogManager.getLogger(ConnectionManager.class);
-
+    // 保存与远程节点之间的链接
+    //DiscoveryNode：远程节点；Transport.Connection: 连接池，实现类：NodeChannels
+    // NodeChannels:代表与远程节点的链接，该链接包含多条通道，每条通道都可以收发信息，且分门别类管理通道
     private final ConcurrentMap<DiscoveryNode, Transport.Connection> connectedNodes = ConcurrentCollections.newConcurrentMap();
     private final ConcurrentMap<DiscoveryNode, ListenableFuture<Void>> pendingConnections = ConcurrentCollections.newConcurrentMap();
     private final AbstractRefCounted connectingRefCounter = new AbstractRefCounted("connection manager") {
@@ -73,6 +75,7 @@ public class ConnectionManager implements Closeable {
     private final DelegatingNodeConnectionListener connectionListener = new DelegatingNodeConnectionListener();
 
     public ConnectionManager(Settings settings, Transport transport) {
+        // 默认创建与远程节点 13个链接，分门别类管理
         this(ConnectionProfile.buildDefaultConnectionProfile(settings), transport);
     }
 
@@ -103,6 +106,8 @@ public class ConnectionManager implements Closeable {
      * Connects to a node with the given connection profile. If the node is already connected this method has no effect.
      * Once a successful is established, it can be validated before being exposed.
      * The ActionListener will be called on the calling thread or the generic thread pool.
+     *
+     * 连接指定远程节点node，且是创建多个链接，分门别类管理；相当于是创建了与远程节点之间的连接池。
      */
     public void connectToNode(DiscoveryNode node, ConnectionProfile connectionProfile,
                               ConnectionValidator connectionValidator,
@@ -248,6 +253,7 @@ public class ConnectionManager implements Closeable {
 
     private void internalOpenConnection(DiscoveryNode node, ConnectionProfile connectionProfile,
                                         ActionListener<Transport.Connection> listener) {
+        // transport基站，打开与远程节点node的链接
         transport.openConnection(node, connectionProfile, ActionListener.map(listener, connection -> {
             assert Transports.assertNotTransportThread("internalOpenConnection success");
             try {

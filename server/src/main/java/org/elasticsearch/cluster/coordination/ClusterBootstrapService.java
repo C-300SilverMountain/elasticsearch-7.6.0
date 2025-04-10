@@ -147,6 +147,13 @@ public class ClusterBootstrapService {
     }
 
     void scheduleUnconfiguredBootstrap() {
+        //unconfiguredBootstrapTimeout作用
+        //定义无主集群的引导超时时间：
+        //当节点启动时，若未发现任何已有集群的主节点（Master Node），它会尝试通过 自动引导（Unconfigured Bootstrap） 创建一个新的集群。
+        //discovery.unconfigured_bootstrap_timeout 决定了节点在此过程中等待其他节点加入的最长时间。
+        //1、超时前：若收到其他节点的加入请求，则共同完成集群初始化。
+        //2、超时后：当前节点将强制成为主节点，并记录警告日志（可能引发脑裂风险）。
+
         if (unconfiguredBootstrapTimeout == null) {
             return;
         }
@@ -207,6 +214,7 @@ public class ClusterBootstrapService {
 
         try {
             // 触发投票
+            // DiscoveryModule初始化Coordinator时，连带初始化ClusterBootstrapService，在ClusterBootstrapService初始化时，指定votingConfigurationConsumer
             votingConfigurationConsumer.accept(votingConfiguration);
         } catch (Exception e) {
             logger.warn(new ParameterizedMessage("exception when bootstrapping with {}, rescheduling", votingConfiguration), e);

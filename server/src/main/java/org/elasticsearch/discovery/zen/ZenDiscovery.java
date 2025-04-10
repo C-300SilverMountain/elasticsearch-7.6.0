@@ -470,9 +470,14 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
         // 如果当前节点所选择的master节点正是自己，则会正式准备成为master节点，但是前提是他必须收到集群中别的节点的投票中有半数以上投向自己。
         // 调用waitToBeElectedAsMaster()方法准备接收别的节点的投票结果等待投自己的超过半数以成为master节点
         if (transportService.getLocalNode().equals(masterNode)) {
+            // 过半协议：只要得票数超过requiredJoins即可称为主节点
+            // 这里的requiredJoins是人工配置的：discovery.zen.minimum_master_nodes
+            // 非常不严谨，假如配错了，则引发脑裂
+            // zen2优化点一：实时计算过半阈值
             final int requiredJoins = Math.max(0, electMaster.minimumMasterNodes() - 1); // we count as one
             logger.debug("elected as master, waiting for incoming joins ([{}] needed)", requiredJoins);
             //默认等待30s
+            //超时时间配置僵化，不够灵活，导致选举效率低
             nodeJoinController.waitToBeElectedAsMaster(requiredJoins, masterElectionWaitForJoinsTimeout,
                     new NodeJoinController.ElectionCallback() {
                         @Override

@@ -180,9 +180,15 @@ public abstract class TcpTransport extends AbstractLifecycleComponent implements
         inboundHandler.registerRequestHandler(reg);
     }
 
+    /**
+     * 此类代表：与某远程节点之间的链接抽象类，内部的channels才是真正的链接，且与某远程节点之间的链接是有多个的；不同任务使用各自的链接；
+     * 简单理解此类：连接池
+     */
     public final class NodeChannels extends CloseableConnection {
         private final Map<TransportRequestOptions.Type, ConnectionProfile.ConnectionTypeHandle> typeMapping;
+        // 与远程节点之间的链接，且多个，通过分类管理，具体分5中类型：详情看 TransportRequestOptions.Type
         private final List<TcpChannel> channels;
+        // 远程节点
         private final DiscoveryNode node;
         private final Version version;
         private final boolean compress;
@@ -243,6 +249,8 @@ public abstract class TcpTransport extends AbstractLifecycleComponent implements
             if (isClosing.get()) {
                 throw new NodeNotConnectedException(node, "connection already closed");
             }
+            // 根据操作类型，获取对应类型的链接
+            // 连接池中有多个链接，分门别类管理，即分多种类型，每种类型有多个链接。这里是获取指定类型下的一个链接
             TcpChannel channel = channel(options.type());
             outboundHandler.sendRequest(node, channel, requestId, action, request, options, getVersion(), compress, false);
         }
@@ -265,6 +273,8 @@ public abstract class TcpTransport extends AbstractLifecycleComponent implements
         closeLock.readLock().lock(); // ensure we don't open connections while we are closing
         try {
             ensureOpen();
+            // 创建与远程节点node的链接，且是多个链接，分类别管理；
+            // 简单理解：创建与远程节点node的连接池
             initiateConnection(node, finalProfile, listener);
         } finally {
             closeLock.readLock().unlock();
@@ -277,7 +287,7 @@ public abstract class TcpTransport extends AbstractLifecycleComponent implements
         assert numConnections > 0 : "A connection profile must be configured with at least one connection";
 
         final List<TcpChannel> channels = new ArrayList<>(numConnections);
-
+        // Connection相当于连接池，而TcpChannel才是真正的指向远程节点的链接，且有多个，分门别类管理
         for (int i = 0; i < numConnections; ++i) {
             try {
                 TcpChannel channel = initiateChannel(node);
@@ -968,6 +978,7 @@ public abstract class TcpTransport extends AbstractLifecycleComponent implements
                 final TcpChannel handshakeChannel = channels.get(0);
                 try {
                     executeHandshake(node, handshakeChannel, connectionProfile, ActionListener.wrap(version -> {
+                        // NodeChannels:代表与远程节点的链接，该链接包含多条通道，每条通道都可以收发信息，且分门别类管理通道
                         NodeChannels nodeChannels = new NodeChannels(node, channels, connectionProfile, version);
                         long relativeMillisTime = threadPool.relativeTimeInMillis();
                         nodeChannels.channels.forEach(ch -> {

@@ -71,6 +71,7 @@ import java.util.stream.Stream;
 import static org.elasticsearch.common.util.concurrent.EsExecutors.daemonThreadFactory;
 
 /**
+ * MasterService 和ClusterApplierService 分别负责运行任务和应用任务产生的集群状态。
  * ClusterApplierService类负责管理需要对集群任务进行处理的模块(Applier)和监听器(Listener)，以及通知各个Applier应用集群状态。
  * 其对外提供接收集群状态的接口，当传输模块收到集群状态时，调用这个接口将集群状态传递过来，内部维护一个线程池用于应用集群状态。对外提供的主要接口如下表所示。
  * 参考：https://cloud.tencent.com/developer/article/1860217

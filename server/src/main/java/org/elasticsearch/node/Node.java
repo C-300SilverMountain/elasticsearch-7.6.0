@@ -583,12 +583,13 @@ public class Node implements Closeable {
             new TemplateUpgradeService(client, clusterService, threadPool, indexTemplateMetaDataUpgraders);
             //集群中节点之间的 传输对象
             //同时调用下列方法，从集合中获取 TCP的处理类：
-            //Transport
+
             //传输模块用于集群内节点之间的内部通信。从一个节点到另一个节
             //点的每个请求都使用传输模块。
             //如同HTTP模块，传输模块本质上也是完全异步的。
             //传输模块使用 TCP 通信，每个节点都与其他节点维持若干 TCP 长
             //连接。内部节点间的所有通信都是本模块承载的。
+            //Transport: 可理解为基站，可发送，也可接收信息
             final Transport transport = networkModule.getTransportSupplier().get();
             Set<String> taskHeaders = Stream.concat(
                 pluginsService.filterPlugins(ActionPlugin.class).stream().flatMap(p -> p.getTaskHeaders().stream()),
@@ -596,7 +597,7 @@ public class Node implements Closeable {
             ).collect(Collectors.toSet());
             //传输服务：初始化请求客户端，类似httpclient，用于召回
             //节点与节点之间通讯工具，注：该类即是客户端也是服务端
-
+            // 此类会创建与远程节点之间的链接，且是多个，分门别类管理
             final TransportService transportService = newTransportService(settings, transport, threadPool,
                 networkModule.getTransportInterceptor(), localNodeFactory, settingsModule.getClusterSettings(), taskHeaders);
             // 网关元数据状态
@@ -950,6 +951,15 @@ public class Node implements Closeable {
         // 默认调用Coordinator的startInitialJoin()方法开始加入集群并准备进行参与选举。
         // https://blog.csdn.net/weixin_40318210/article/details/81515809
         // https://blog.csdn.net/kissfox220/article/details/119956861
+        // 当前两个版本选举算法
+        // 旧：legacy-zen（ZenDiscovery） VS 新：zen（Coordinator）
+        // ZenDiscovery：脑裂风险高，选举效率低（选举超时配置僵化）、依赖 Gossip 协议传播集群状态（延迟概率大）
+        // Coordinator：实时计算过半阈值，动态超时调整（7.6.0没有实现，仅超时随机化：超时时间基于配置值增加随机抖动（避免多个节点同时发起选举））、基于 Raft 协议的共识算法改进（实时性更好）
+        //风险高：legacy-zen过半阈值人工配置，一旦有误，引发脑裂；对比zen2：过半阈值实时计算
+        //7.6.0初步引入Raft算法，很多地方不完善
+        // 如:
+        // 1、动态超时调整未实现（依赖固定配置）。
+        // 2、未完全解决偶数节点分区的脑裂问题。
         discovery.startInitialJoin();
         final TimeValue initialStateTimeout = DiscoverySettings.INITIAL_STATE_TIMEOUT_SETTING.get(settings());
         configureNodeAndClusterIdStateListener(clusterService);

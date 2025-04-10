@@ -11,6 +11,8 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 
+import java.util.concurrent.locks.LockSupport;
+
 public class NettyServer {
 
     public static void main(String[] args) throws Exception {
@@ -49,8 +51,10 @@ public class NettyServer {
             //启动服务器(并绑定端口)
             ChannelFuture cf = bootstrap.bind(6668).sync();
 
-            //给cf 注册监听器，监控我们关心的事件
+            long sleep = 5000 * 1000 * 1000;
+            LockSupport.parkNanos(sleep);
 
+            //给cf 注册监听器，监控我们关心的事件
             cf.addListener(new ChannelFutureListener() {
                 @Override
                 public void operationComplete(ChannelFuture future) throws Exception {

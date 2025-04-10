@@ -597,6 +597,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
             // 获取所有具有参与选举资格的 节点，即已配置为master:true的节点
             //peerFinder = CoordinatorPeerFinder
             // coordinationState从哪里得到？ 在函数doStart()中，初始化coordinationState，本质上是集群已持久化的集群状态
+            //此方法真正触发选举流程
             peerFinder.activate(coordinationState.get().getLastAcceptedState().nodes());
             clusterFormationFailureHelper.start();
 
@@ -791,15 +792,29 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
      */
     @Override
     public void startInitialJoin() {
-        // 如果当前节点是候选者状态，是不会执行becomeCandidate的，而是直接执行scheduleUnconfiguredBootstrap进行选举。
+        // 如果当前节点是候选者状态，是不会执行becomeCandidate的
         // 因为如果是非候选者状态，才需要执行必要状态清零操作
         // 注：无论是何种方式触发的选举，最终的会调用startElectionScheduler启动选举，该方法并不会立即执行选举，而是采用随机递增延迟执行，酱紫可避免不必要的竞争
         // 记住是 随机递增延迟，避免撞车
         synchronized (mutex) {
-            // becomeCandidate：先进行必要的清零操作，再进入选主流程
+            // becomeCandidate：先进行必要的清零操作，且触发选举流程
             becomeCandidate("startInitialJoin");
         }
+        // 无主引导流程：
+        //节点启动时进入无主状态，触发 unconfigured_bootstrap_timeout 机制。
+        //若在超时时间内（默认 30 秒）有其他节点加入，共同选举主节点。
+        //若超时仍未形成集群，当前节点成为主节点（风险较高）。
         clusterBootstrapService.scheduleUnconfiguredBootstrap();
+        //工作原理与流程(scheduleUnconfiguredBootstrap)
+        //此方法执行是有前提条件的，initial_master_nodes、discovery.seed_providers等未配置
+        //1、节点启动检测：
+        //节点启动时检查是否已配置 cluster.initial_master_nodes 或发现现有主节点。
+        //若均未满足，进入 无主引导模式（Unconfigured Bootstrap）。
+        //2、等待其他节点加入：
+        //通过 Zen Discovery 的 Gossip 协议或 Raft 日志同步，等待其他节点尝试加入。
+        //持续时间为 discovery.unconfigured_bootstrap_timeout。
+        //3、超时处理：
+        //超时前成功：节点合并集群状态，选举主节点。
     }
 
     @Override

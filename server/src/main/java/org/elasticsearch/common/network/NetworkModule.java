@@ -122,8 +122,9 @@ public final class NetworkModule {
         this.settings = settings;
         this.transportClient = transportClient;
         for (NetworkPlugin plugin : plugins) {
+            // Transport可理解为：基站（对外：基站对用户）
             //这里会调用 Security.getHttpTransports 创建全局唯一的SecurityNetty4HttpServerTransport
-            //负责处理集群接收外部 用户rest请求 实现类
+            //1、rest请求： 负责处理集群接收外部用户rest请求的实现类
             Map<String, Supplier<HttpServerTransport>> httpTransportFactory = plugin.getHttpTransports(settings, threadPool, bigArrays,
                 pageCacheRecycler, circuitBreakerService, xContentRegistry, networkService, dispatcher);
             if (transportClient == false) {
@@ -131,7 +132,8 @@ public final class NetworkModule {
                     registerHttpTransport(entry.getKey(), entry.getValue());
                 }
             }
-            //负责处理集群中节点之间 rpc请求 实现类：包括发送与接收
+            // Transport可理解为：基站（对内：基站对基站）
+            //2、内部请求：负责处理集群中节点之间 rpc请求 实现类：包括发送与接收
             Map<String, Supplier<Transport>> transportFactory = plugin.getTransports(settings, threadPool, pageCacheRecycler,
                 circuitBreakerService, namedWriteableRegistry, networkService);
             for (Map.Entry<String, Supplier<Transport>> entry : transportFactory.entrySet()) {

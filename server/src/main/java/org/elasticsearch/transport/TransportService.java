@@ -72,6 +72,9 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
+/**
+ * TransportService类是在网络层之.上对RPC的发送与接收的服务层封装，虽然从模块设计角度来说，网络层的设计对内部是否使用Netty框架是解耦的，除Netty外，也可以使用其他通信框架
+ */
 public class TransportService extends AbstractLifecycleComponent implements TransportMessageListener, TransportConnectionListener {
     private static final Logger logger = LogManager.getLogger(TransportService.class);
 
@@ -574,6 +577,8 @@ public class TransportService extends AbstractLifecycleComponent implements Tran
                                                                 final TransportRequest request,
                                                                 final TransportResponseHandler<T> handler) {
         try {//getConnection 方法会根据节点是否为本地的区别返回一个 Connection 实例
+            // 注：当node为本地节点则拿到的是：localNodeConnection，最终调用localNodeConnection.sendRequest
+            // 当node为远程节点则拿到是远程Transport.Connection(TCP)
             Transport.Connection connection = getConnection(node);
             //通过跟踪 sendRequestInternal 方法可以知道，最终处理转发请求的是 connection.sendRequest，
             // 当节点为本地的时候，connection.sendRequest 调用的是 localNodeConnection 的 sendRequest，而这个方法最终调用的是 sendLocalRequest。

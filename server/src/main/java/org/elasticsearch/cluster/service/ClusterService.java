@@ -41,6 +41,10 @@ import org.elasticsearch.threadpool.ThreadPool;
 import java.util.Collections;
 import java.util.Map;
 
+/**
+ *  MasterService 和ClusterApplierService 分别负责运行任务和应用任务产生的集群状态。
+ *  参考：https://cloud.tencent.com/developer/article/1860217
+ */
 public class ClusterService extends AbstractLifecycleComponent {
     private final MasterService masterService;
 

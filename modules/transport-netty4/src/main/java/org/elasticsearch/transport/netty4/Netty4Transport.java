@@ -283,6 +283,7 @@ public class Netty4Transport extends TcpTransport {
         Bootstrap bootstrapWithHandler = clientBootstrap.clone();
         bootstrapWithHandler.handler(getClientChannelInitializer(node));
         bootstrapWithHandler.remoteAddress(address);
+        //在Netty中，Channel的所有的I/O操作都是异步的，调用者调用一个异步操作后，会立即返回一个ChannelFuture对象，该对象表示异步操作的结果。
         ChannelFuture connectFuture = bootstrapWithHandler.connect();//该方法用于客户端，用来连接远程服务器端
 
         Channel channel = connectFuture.channel();
@@ -292,9 +293,12 @@ public class Netty4Transport extends TcpTransport {
         }
         addClosedExceptionLogger(channel);
 
+        //ChannelFuture Listener的作用就是监听这个异步操作的结果。一旦异步操作完成，无论是成功、失败还是被取消，ChannelFutureListener都会得到通知
         Netty4TcpChannel nettyChannel = new Netty4TcpChannel(channel, false, "default", connectFuture);
         channel.attr(CHANNEL_KEY).set(nettyChannel);
 
+        //使用ChannelFutureListener的方式通常是通过调用ChannelFuture的addListener方法，将ChannelFutureListener实例添加到ChannelFuture中。
+        // 当异步操作完成后，Netty会自动调用ChannelFutureListener的operationComplete方法，将操作结果作为参数传递给该方法，开发者可以在这个方法中实现自己的逻辑处理‌
         return nettyChannel;
     }
 
