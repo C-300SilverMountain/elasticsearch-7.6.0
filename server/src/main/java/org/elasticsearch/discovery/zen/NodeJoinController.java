@@ -111,29 +111,34 @@ public class NodeJoinController {
                 assert electionContext != null : "waitToBeElectedAsMaster is called we are not accumulating joins";
                 myElectionContext = electionContext;
                 electionContext.onAttemptToBeElected(requiredMasterJoins, wrapperCallback);
+                // 执行一次统计选票是否过半：因为投给本地节点的其他节点 可能先执行了选举流程且投给了本节点
                 checkPendingJoinsAndElectIfNeeded();
             }
 
             //此处实际等待handleJoinRequest，收集到足够的选票后，触发wrapperCallback
             try {
-                //默认等待30s，失败则重新选举
+                //等待投票：默认等待30s，失败则重新选举
                 if (done.await(timeValue.millis(), TimeUnit.MILLISECONDS)) {
                     // callback handles everything
+                    // 在超时时间内，收到足够选票，则正常返回。后面的代码不执行
                     return;
                 }
             } catch (InterruptedException e) {
 
             }
+            // 如果done.await执行成功，后面的代码不会执行，因为已经return
+            // 如果执行失败，则执行后面的代码：发起再次选举流程
             if (logger.isTraceEnabled()) {
                 final int pendingNodes = myElectionContext.getPendingMasterJoinsCount();
                 logger.trace("timed out waiting to be elected. waited [{}]. pending master node joins [{}]", timeValue, pendingNodes);
             }
 
-            //如果在规定的timeout里，并没有收到足够的投票，那么说明本节点的选举失败。failContextIfNeeded会触发onFailure
+            // 如果在规定的timeout里，并没有收到足够的投票，那么说明本节点的选举失败。failContextIfNeeded会触发onFailure
             // 则会回到通过markThreadAsDoneAndStartNew()关闭当前线程，并重新启动一个线程在startNewThreadIfNotRunning()方法中开始下一次循环中，继续上述选举的流程参与选举。
 
             // https://blog.csdn.net/kissfox220/article/details/119956861
             // 如果30秒内没有完成选举、则放弃本轮选举，发布选举失败信息，通知集群内其他节点开始新一轮临时master选举
+            // 触发callback.onFailure
             failContextIfNeeded(myElectionContext, "timed out waiting to be elected");
         } catch (Exception e) {
             logger.error("unexpected failure while waiting for incoming joins", e);
@@ -351,6 +356,7 @@ public class NodeJoinController {
             @Override
             public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
                 if (newState.nodes().isLocalNodeElectedMaster()) {
+                    // 通知本地选自己而等待的线程：继续执行
                     ElectionContext.this.onElectedAsMaster(newState);
                 } else {
                     onFailure(source, new NotMasterException("election stopped [" + source + "]"));

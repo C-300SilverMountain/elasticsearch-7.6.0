@@ -477,7 +477,7 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
             final int requiredJoins = Math.max(0, electMaster.minimumMasterNodes() - 1); // we count as one
             logger.debug("elected as master, waiting for incoming joins ([{}] needed)", requiredJoins);
             //默认等待30s
-            //超时时间配置僵化，不够灵活，导致选举效率低
+            //超时时间配置僵化，不够灵活，导致成功选举效率低，如网络延迟大，固定超时时间往往导致再次发起重选举。如动态调整超时时间，在网络延迟大时，适当调大超时时间，可避免再次发起选举
             nodeJoinController.waitToBeElectedAsMaster(requiredJoins, masterElectionWaitForJoinsTimeout,
                     new NodeJoinController.ElectionCallback() {
                         @Override
@@ -491,6 +491,8 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
                         public void onFailure(Throwable t) {
                             logger.trace("failed while waiting for nodes to join, rejoining", t);
                             synchronized (stateMutex) {
+                                // 超时或发生异常，就开始新一轮选举
+                                // 这里的超时时间masterElectionWaitForJoinsTimeout，写死，不够灵活
                                 joinThreadControl.markThreadAsDoneAndStartNew(currentThread);
                             }
                         }
@@ -856,8 +858,7 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
     //从masterCandidates中选主时，首先需要判断当前候选者人数是否达到法定人数，否则选主失败
     private DiscoveryNode findMaster() {
         logger.trace("starting to ping");
-        // 到此说明：节点之间的相互投票是通过ping来实现。具体实现类：UnicastZenPing，其构造函数中会读取配置中的discovery.zen.ping.unicast.hosts,保存其他节点的ip.
-        //根据pingAndWait()方法去获取集群内其他节点关于选举的ping请求的回复。注：这里阻塞等待回复！！！
+        //根据pingAndWait()方法去获取集群内其他节点持有的集群状态数据。注：这里阻塞等待回复！！！
         List<ZenPing.PingResponse> fullPingResponses = pingAndWait(pingTimeout).toList();
         if (fullPingResponses == null) {
             logger.trace("No full ping responses");
@@ -885,7 +886,7 @@ public class ZenDiscovery extends AbstractLifecycleComponent implements Discover
         // 重新添加当前节点选举数据到ping结果列表中
         fullPingResponses.add(new ZenPing.PingResponse(localNode, null, this.clusterState()));
         // 通过masterElectionIgnoreNonMasters参数来判断是否需要忽略 没有候选资格的节点
-        // masterElectionIgnoreNonMasters默认false,因此data节点的选举数据也会被考虑到选举的过程中。
+        // masterElectionIgnoreNonMasters默认false,因此data节点持有的集群数据也会被考虑到选举的过程中。
         // filter responses
         final List<ZenPing.PingResponse> pingResponses = filterPingResponses(fullPingResponses, masterElectionIgnoreNonMasters, logger);
         //activeMasters代表：集群中已存在的主节点。一般为1个或null

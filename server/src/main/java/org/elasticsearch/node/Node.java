@@ -953,8 +953,8 @@ public class Node implements Closeable {
         // https://blog.csdn.net/kissfox220/article/details/119956861
         // 当前两个版本选举算法
         // 旧：legacy-zen（ZenDiscovery） VS 新：zen（Coordinator）
-        // ZenDiscovery：脑裂风险高，选举效率低（选举超时配置僵化）、依赖 Gossip 协议传播集群状态（延迟概率大）
-        // Coordinator：实时计算过半阈值，动态超时调整（7.6.0没有实现，仅超时随机化：超时时间基于配置值增加随机抖动（避免多个节点同时发起选举））、基于 Raft 协议的共识算法改进（实时性更好）
+        // ZenDiscovery：脑裂风险高，选举效率低（选举超时配置僵化）、依赖 Gossip 协议传播集群状态（延迟概率大）（因为A->B->C）
+        // Coordinator：实时计算过半阈值，动态超时调整（7.6.0没有实现，仅超时随机化：超时时间基于配置值增加随机抖动（避免多个节点同时发起选举））、基于 Raft 协议的共识算法改进（实时性更好）（A->B  A->C）
         //风险高：legacy-zen过半阈值人工配置，一旦有误，引发脑裂；对比zen2：过半阈值实时计算
         //7.6.0初步引入Raft算法，很多地方不完善
         // 如:

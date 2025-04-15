@@ -90,7 +90,10 @@ import static org.elasticsearch.common.util.concurrent.ConcurrentCollections.new
 public class UnicastZenPing implements ZenPing {
 
     private static final Logger logger = LogManager.getLogger(UnicastZenPing.class);
-
+    // 单播是客户端与服务器之间的点到点连接。单播（Unicast）是在一个单个的发送者和一个接受者之间通过网络进行的通信。
+    //组播与广播
+    //广播: 主机之间“一对所有”的通讯模式，网络对其中每一台主机发出的信号都进行无条件复制并转发，所有主机都可以接收到所有信息（不管你是否需要）
+    //组播: 主机之间“一对一组”的通讯模式，也就是加入了同一个组的主机可以接受到此组内的所有数据，网络中的交换机和路由器只向有需求者复制并转发其所需数据。
     public static final String ACTION_NAME = "internal:discovery/zen/unicast";
 
     private final ThreadPool threadPool;
