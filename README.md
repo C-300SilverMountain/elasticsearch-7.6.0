@@ -155,3 +155,9 @@ http://localhost:9200/
 > 把这两个选项(Build and run using | Run tests using)从Gradle改成IntelliJ IDEA
 
 > 选中Add dependencies with provided scope to classpath
+
+
+# 打包
+1、先点击：distribution下的distribution下的distZip，最后点击Tasks下的distribution下的distzip
+2、在server下build-idea下distributions可看到jar
+3、将jar包重命名并替换到发布版本的lib文件夹中

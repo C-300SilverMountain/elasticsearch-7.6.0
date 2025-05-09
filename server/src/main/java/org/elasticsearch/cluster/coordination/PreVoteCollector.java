@@ -189,8 +189,6 @@ public class PreVoteCollector {
 
         /**
          * 处理 预投票  结果
-         * @param response
-         * @param sender
          */
         private void handlePreVoteResponse(final PreVoteResponse response, final DiscoveryNode sender) {
             if (isClosed.get()) {

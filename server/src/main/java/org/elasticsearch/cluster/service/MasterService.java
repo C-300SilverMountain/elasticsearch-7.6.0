@@ -299,13 +299,16 @@ public class MasterService extends AbstractLifecycleComponent {
         };
         // ClusterStatePublisher是抽象类，具体类：ZenDiscovery（旧版ES用它） 和 Coordinator（新版ES用它，7.6默认）
         //先关注：ZenDiscovery
+        // 在Node.start中 显式调用clusterService.getMasterService().setClusterStatePublisher配置集群状态发布器
         clusterStatePublisher.publish(clusterChangedEvent, fut, taskOutputs.createAckListener(threadPool, clusterChangedEvent.state()));
 
         // indefinitely wait for publication to complete
         try {
             FutureUtils.get(fut);
+            // 唤醒选举流程，继续执行
             onPublicationSuccess(clusterChangedEvent, taskOutputs);
         } catch (Exception e) {
+            // 唤醒选举流程，并告知执行异常，让其执行异常处理: 再次发起选举
             onPublicationFailed(clusterChangedEvent, taskOutputs, startTimeMillis, e);
         }
     }
@@ -736,6 +739,7 @@ public class MasterService extends AbstractLifecycleComponent {
         ClusterTasksResult<Object> clusterTasksResult;
         try {
             List<Object> inputs = taskInputs.updateTasks.stream().map(tUpdateTask -> tUpdateTask.task).collect(Collectors.toList());
+            // 执行Task，并不是执行Task的running方法；而是执行JoinTaskExecutor.execute
             clusterTasksResult = taskInputs.executor.execute(previousClusterState, inputs);
             if (previousClusterState != clusterTasksResult.resultingState &&
                 previousClusterState.nodes().isLocalNodeElectedMaster() &&

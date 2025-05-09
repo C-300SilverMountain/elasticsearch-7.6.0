@@ -127,8 +127,6 @@ public class ElectMasterService {
 
     /**
      * 判断当前候选者人数是否达到法定人数，否则选主失败。
-     * @param candidates
-     * @return
      */
     public boolean hasEnoughCandidates(Collection<MasterCandidate> candidates) {
         //候选者为空

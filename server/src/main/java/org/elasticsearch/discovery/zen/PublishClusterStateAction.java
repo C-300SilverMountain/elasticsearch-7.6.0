@@ -147,6 +147,7 @@ public class PublishClusterStateAction {
                 }
             }
             //全量状态保存在serializedStates，增量状态保存在serializedDiffs。每个集群状态都有自己为一个版本号，在发布集群状态时允许相邻版本好之间只发送增量内容
+            // 这行代码说明：首次同步后，后续基本都是增量同步
             sendFullVersion = !discoverySettings.getPublishDiff() || clusterChangedEvent.previousState() == null;
             //全量状态
             serializedStates = new HashMap<>();
@@ -162,7 +163,7 @@ public class PublishClusterStateAction {
             // 构造需要发送的状态，如果上次发布集群状态的节点不存在或设置了全量发送配置，则构建全量状态否则构建增量状态然后进行序列化并压缩
             buildDiffAndSerializeStates(clusterChangedEvent.state(), clusterChangedEvent.previousState(),
                     nodesToPublishTo, sendFullVersion, serializedStates, serializedDiffs);
-            // 发布状态返回结果处理
+            // 状态提交结果监听器：每个节点执行提交状态后，都会触发
             final BlockingClusterStatePublishResponseHandler publishResponseHandler =
                 new AckClusterStatePublishResponseHandler(nodesToPublishTo, ackListener);
             sendingController = new SendingController(clusterChangedEvent.state(), minMasterNodes,
@@ -172,7 +173,7 @@ public class PublishClusterStateAction {
         }
 
         try {
-            // 广播集群状态
+            // 两阶段提交集群状态
             innerPublish(clusterChangedEvent, nodesToPublishTo, sendingController, ackListener, sendFullVersion, serializedStates,
                 serializedDiffs);
         } catch (FailedToCommitClusterStateException t) {
@@ -261,12 +262,12 @@ public class PublishClusterStateAction {
             try {
                 if (sendFullVersion || !previousState.nodes().nodeExists(node)) {
                     // will send a full reference
-                    // 发送全量
+                    // 准备全量数据：这个简单，新状态对象正是全量数据
                     if (serializedStates.containsKey(node.getVersion()) == false) {
                         serializedStates.put(node.getVersion(), serializeFullClusterState(clusterState, node.getVersion()));
                     }
                 } else {
-                    // 发送增量
+                    // 准备增量数据：这个稍微麻烦点，但不复杂。主要是对比前后两个集合，计算diff（简单粗暴）。
                     // will send a diff
                     if (diff == null) {
                         diff = clusterState.diff(previousState);

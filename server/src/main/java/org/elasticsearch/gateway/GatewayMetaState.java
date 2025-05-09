@@ -98,13 +98,6 @@ public class GatewayMetaState implements Closeable {
      * 加载磁盘元数据
      * 在node实例的start方法中会调用gatewayMetaState.start方法
      * 参考：https://blog.csdn.net/GeekerJava/article/details/139702581
-     * @param settings
-     * @param transportService
-     * @param clusterService
-     * @param metaStateService
-     * @param metaDataIndexUpgradeService
-     * @param metaDataUpgrader
-     * @param persistedClusterStateService
      */
     public void start(Settings settings, TransportService transportService, ClusterService clusterService,
                       MetaStateService metaStateService, MetaDataIndexUpgradeService metaDataIndexUpgradeService,

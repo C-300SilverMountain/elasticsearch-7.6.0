@@ -204,6 +204,7 @@ public class UnicastZenPing implements ZenPing {
     protected void ping(final Consumer<PingCollection> resultsConsumer,
                         final TimeValue scheduleDuration,
                         final TimeValue requestDuration) {
+        // 所有种子主机地址
         final List<TransportAddress> seedAddresses = new ArrayList<>();
         seedAddresses.addAll(hostsProvider.getSeedAddresses(createHostsResolver()));
         final DiscoveryNodes nodes = contextProvider.clusterState().nodes();
@@ -215,7 +216,8 @@ public class UnicastZenPing implements ZenPing {
         final ConnectionProfile connectionProfile =
             ConnectionProfile.buildSingleChannelProfile(TransportRequestOptions.Type.REG, requestDuration, requestDuration,
                 TimeValue.MINUS_ONE, null);
-        //一个PingingRound代表本节点的一次ping操作，包含ping操作连接类型和timeout，所要发往的节点，和本轮操作的id
+        // PingingRound: 表示ping轮次，用于收集ping节点的结果
+        //一个PingingRound代表本节点的一次ping操作，会ping多个节点，包含ping操作连接类型和timeout，所要发往的节点，和本轮操作的id
         final PingingRound pingingRound = new PingingRound(pingingRoundIdGenerator.incrementAndGet(), seedAddresses, resultsConsumer,
             nodes.getLocalNode(), connectionProfile);
         activePingingRounds.put(pingingRound.id(), pingingRound);
@@ -230,17 +232,21 @@ public class UnicastZenPing implements ZenPing {
 
             @Override
             protected void doRun() throws Exception {
+                // 真正并发ping多个节点的流程，并将结果收集在pingingRound中
                 sendPings(requestDuration, pingingRound);
             }
         };
         //默认时间为1秒一次，执行一次pingSender的sendPings方法
+        // pingingRound内部保存了一批待ping的主机地址
+        // 以下代码，针对每个主机连续ping三次，假如第一次ping通，后面两次其实没必要ping了，但并没有实现阻止后面两次继续ping。可见此处代码并不是十全十美
         threadPool.generic().execute(pingSender);
         threadPool.schedule(pingSender, TimeValue.timeValueMillis(scheduleDuration.millis() / 3), ThreadPool.Names.GENERIC);
         threadPool.schedule(pingSender, TimeValue.timeValueMillis(scheduleDuration.millis() / 3 * 2), ThreadPool.Names.GENERIC);
-        //启动任务，3秒后，用来结束pingingRound关于pingResponse的收集
+        //启动任务，3秒后，用来结束pingingRound关于pingResponse的收集，并返回结果给最外层
         threadPool.schedule(new AbstractRunnable() {
             @Override
             protected void doRun() throws Exception {
+                // 结束ping结果的收集，并返回给最外层的调用，实际是调用最外层的resultsConsumer，将结果传递给它
                 finishPingingRound(pingingRound);
             }
 
@@ -341,6 +347,7 @@ public class UnicastZenPing implements ZenPing {
             synchronized (this) {
                 //通过cas将closed的状态从false改为true，并将当前id从可用的activePingingRounds集合中移除，关闭当前节点与集群中别的节点的所有连接。
                 if (closed.compareAndSet(false, true)) {
+                    // 从存活的ping轮次列表中  移除：主要是监控使用
                     activePingingRounds.remove(id);
                     toClose = new ArrayList<>(tempConnections.values());
                     tempConnections.clear();
@@ -349,6 +356,7 @@ public class UnicastZenPing implements ZenPing {
             if (toClose != null) {
                 // we actually closed
                 try {
+                    // 执行最外层监听ping操作结果的方法
                     pingListener.accept(pingCollection);
                 } finally {
                     IOUtils.closeWhileHandlingException(toClose);
@@ -466,7 +474,8 @@ public class UnicastZenPing implements ZenPing {
 
             @Override
             public void handleResponse(UnicastPingResponse response) {
-                //先判断pingingRound是否已经关闭，如果还未关闭，则将response中关于节点对于选举的数据存放在其Map中，按照节点和其选举的选择进行存放。
+                // 收集ping节点的结果集
+                // 先判断pingingRound是否已经关闭，如果还未关闭，则将response中关于节点对于选举的数据存放在其Map中，按照节点和其选举的选择进行存放。
                 logger.trace("[{}] received response from {}: {}", pingingRound.id(), node, Arrays.toString(response.pingResponses));
                 if (pingingRound.isClosed()) {
                     if (logger.isTraceEnabled()) {

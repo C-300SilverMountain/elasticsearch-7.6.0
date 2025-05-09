@@ -114,6 +114,8 @@ public class JoinTaskExecutor implements ClusterStateTaskExecutor<JoinTaskExecut
             // use these joins to try and become the master.
             // Note that we don't have to do any validation of the amount of joining nodes - the commit
             // during the cluster state publishing guarantees that we have enough
+            // 当前节点刚刚竞选成功，调用了closeAndBecomeMaster()，准备成功主节点，并发布状态，此情况下，会执行到此处
+            // 生成一个新的状态，但此状态未被应用，必须经过两阶段提交，过半数同意后，才能应用到集群中
             newState = becomeMasterAndTrimConflictingNodes(currentState, joiningNodes);
             nodesChanged = true;
         } else if (currentNodes.isLocalNodeElectedMaster() == false) {
@@ -133,6 +135,7 @@ public class JoinTaskExecutor implements ClusterStateTaskExecutor<JoinTaskExecut
         final boolean enforceMajorVersion = currentState.getBlocks().hasGlobalBlock(STATE_NOT_RECOVERED_BLOCK) == false;
         // processing any joins
         for (final Task joinTask : joiningNodes) {
+            // 忽略BecomeMasterTask和FinishElectionTask，即此类任务在这代码，不作任何处理
             if (joinTask.isBecomeMasterTask() || joinTask.isFinishElectionTask()) {
                 // noop
             } else if (currentNodes.nodeExists(joinTask.node())) {

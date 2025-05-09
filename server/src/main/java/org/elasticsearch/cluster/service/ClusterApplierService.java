@@ -364,10 +364,6 @@ public class ClusterApplierService extends AbstractLifecycleComponent implements
 
     /**
      * 在新的线程池应用集群状态
-     * @param source
-     * @param config
-     * @param executor
-     * @param listener
      */
     private void submitStateUpdateTask(final String source, final ClusterStateTaskConfig config,
                                        final Function<ClusterState, ClusterState> executor,

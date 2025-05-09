@@ -123,10 +123,11 @@ public abstract class PeerFinder {
         synchronized (mutex) {
             // 简单的参数条件判断
             assert assertInactiveWithNoKnownPeers();
-            // 激活探查状态，等于true
+            // 激活探活流程，表示探活流程进行中
             active = true;
             this.lastAcceptedNodes = lastAcceptedNodes;
             leader = Optional.empty();
+            // 1、首先与discovery.seed_providers中所有节点连接，并调用相应接口获取对方已知的集群节点列表，然后分别与这些节点建立链接，进行通信
             // 跟具备master参选资格的节点建立起链接，当链接成功个数满足过半时，立即就发起预选举，没必要等所有链接建立完成后，才发起预选举流程。
             handleWakeUp(); // return value discarded: there are no known peers, so none can be disconnected
         }
@@ -268,16 +269,20 @@ public abstract class PeerFinder {
      */
     private boolean handleWakeUp() {
         assert holdsLock() : "PeerFinder mutex not held";
-        //peersByAddress为端点列表，遍历此列表，逐个建立与本端点的链接，如建立失败，则从端点列表中删除
+        // peersByAddress: 是保存在内存中的，只有已参与过选举，再次发生选举的节点，此值才不为空
+        // peersByAddress为端点列表，遍历此列表，逐个建立与本端点的链接，如建立失败，则从端点列表中删除
+        // Peer::handleWakeUp  返回true的话，则从peersByAddress当中删除
         final boolean peersRemoved = peersByAddress.values().removeIf(Peer::handleWakeUp);
-        // 假如探查状态为false，则返回
+
         if (active == false) {
+            // 说明：探活流程被取消。好家伙，刚开始就有可能被取消
             logger.trace("not active");
             return peersRemoved;
         }
         // 从集群状态中解析出：具有选举资格的节点，初次启动，肯定为空，所以加了一个步骤：resolveConfiguredHosts：从配置文件中读取
         // 如果某个节点在集群中运行过一段时间后，发生重启,或主节点掉线/宕机，那么大概率通过此步骤就触发重新选举，而不会走到resolveConfiguredHosts函数
         logger.trace("probing master nodes from cluster state: {}", lastAcceptedNodes);
+        // lastAcceptedNodes：是从集群状态里获取的，所以说初次加入集群的节点，lastAcceptedNodes为空
         // 遍历所有具备选举资格的节点，并执行探测（Probe=探测）,其实就是ping对方，当ping通的节点数 过半，即执行预选举
         for (ObjectCursor<DiscoveryNode> discoveryNodeObjectCursor : lastAcceptedNodes.getMasterNodes().values()) {
             startProbe(discoveryNodeObjectCursor.value.getAddress());
@@ -291,6 +296,12 @@ public abstract class PeerFinder {
             }
         });
 
+        //周期性发现探测--核心作用
+        //(1) 周期性节点发现
+        //目标：非主节点（Data Node 或 Client Node）通过定期发送探测请求，主动发现集群中的其他节点（尤其是主节点候选）。
+        //(2) 维护集群拓扑一致性
+        //场景：当节点加入或离开集群时，其他节点需要通过周期性探测快速感知变化，更新本地集群状态。
+        // findPeersInterval 默认1秒
         transportService.getThreadPool().scheduleUnlessShuttingDown(findPeersInterval, Names.GENERIC, new AbstractRunnable() {
             @Override
             public boolean isForceExecution() {
@@ -306,12 +317,20 @@ public abstract class PeerFinder {
             @Override
             protected void doRun() {
                 synchronized (mutex) {
+                    // 任意一个节点探测不成功，都会返回true
+                    // handleWakeUp()内部：遍历peersByAddress，逐个调用相应接口，获取其已知集群节点，并其建立连接（服务发现）
                     if (handleWakeUp() == false) {
+                        // 没有任意节点从peersByAddress集合被剔除，即peersByAddress中所有节点都能正常连通
                         return;
                     }
                 }
                 // 触发onFoundPeersUpdated()3次
+                // 疑问一：这里定期执行onFoundPeersUpdated，难道每次都得重新选举？
+                // 答：非也。选举流程结束后，节点状态要么是主节点，要么是从节点，不会是候选节点。onFoundPeersUpdated内部，只有mode == Mode.CANDIDATE时，才会发起选举
                 onFoundPeersUpdated();
+
+                // doRun是定期执行。假如选举流程被其他线程触发，即mode == Mode.CANDIDATE
+                // 而doRun会判断是否Mode.CANDIDATE，是则执行选举，此时就会出现多线程执行选举，此时增加了synchronized (mutex)解决并发问题
             }
 
             @Override
@@ -324,6 +343,10 @@ public abstract class PeerFinder {
     }
 
     // 启动探查
+    // startProbe 是 Elasticsearch 节点启动过程中 集群发现和健康检查的核心机制，其作用包括：
+    // 1、探测种子节点或主节点，确保网络连通性。
+    // 2、验证主节点选举条件，避免脑裂。
+    // 3、同步集群状态，保证数据一致性。
     protected void startProbe(TransportAddress transportAddress) {
         // 验证是否锁定 mutex对象，如没有，则报错
         assert holdsLock() : "PeerFinder mutex not held";
@@ -338,7 +361,9 @@ public abstract class PeerFinder {
             return;
         }
         // 创建与远程节点的链接，并保存到 peersByAddress,注：peersByAddress保存的是：具备选举资格的节点
+        // 远程节点transportAddress不存在于peersByAddress中，才会触发createConnectingPeer，避免死循环
         peersByAddress.computeIfAbsent(transportAddress, this::createConnectingPeer);
+
     }
 
     private class Peer {
@@ -358,7 +383,7 @@ public abstract class PeerFinder {
 
         /**
          * 判断指定节点是否可通
-         * @return
+         * @return 返回true说明节点不可用，得删除。返回false说明节点可用，不能删除
          */
         boolean handleWakeUp() {
             assert holdsLock() : "PeerFinder mutex not held";
@@ -367,12 +392,19 @@ public abstract class PeerFinder {
                 return true;
             }
 
+            //远程节点
             final DiscoveryNode discoveryNode = getDiscoveryNode();
             // may be null if connection not yet established
 
             if (discoveryNode != null) {
+                // transportService.nodeConnected：证明该节点已链接
                 if (transportService.nodeConnected(discoveryNode)) {
+                    // peersRequestInFlight：请求同辈是否在执行过程中
                     if (peersRequestInFlight == false) {
+
+                        // 内部会使peersRequestInFlight=true
+                        // 服务发现最关键一步：调用远程节点discoveryNode的接口，获取对方已知的集群节点列表，然后分别与这些节点建立链接，进行通信
+                        // 然后将可连通的节点，放入peersByAddress集合
                         requestPeers();
                     }
                 } else {
@@ -416,7 +448,7 @@ public abstract class PeerFinder {
                         assert discoveryNode.get() == null : "discoveryNode unexpectedly already set to " + discoveryNode.get();
                         // 保存连接
                         discoveryNode.set(remoteNode);
-                        // 发送ping命令，验证链接是否可用
+                        // 实现服务发现：发送ping命令，拿到对方已知的节点集合，分别与每个节点建立连接
                         requestPeers();
                     }
 

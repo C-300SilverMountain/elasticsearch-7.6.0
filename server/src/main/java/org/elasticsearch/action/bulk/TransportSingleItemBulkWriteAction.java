@@ -49,8 +49,6 @@ public abstract class TransportSingleItemBulkWriteAction<
 
     /**
      *
-     * @param task
-     * @param request
      * @param listener 该监听器专门响应用户请求的，即向用户发送响应内容
      */
     @Override

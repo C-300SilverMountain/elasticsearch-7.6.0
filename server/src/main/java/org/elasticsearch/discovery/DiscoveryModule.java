@@ -73,9 +73,26 @@ public class DiscoveryModule {
 
     public static final Setting<String> DISCOVERY_TYPE_SETTING =
         new Setting<>("discovery.type", ZEN2_DISCOVERY_TYPE, Function.identity(), Property.NodeScope);
+    //discovery.zen.hosts_provider作用：
+    //功能：指定节点发现（Node Discovery）的提供者（Provider），即告诉 Elasticsearch 如何找到集群中的其他节点。
+    //场景：在分布式环境中，节点需要自动发现彼此以形成集群。此参数决定节点如何获取初始的主节点列表（master-eligible nodes）。
     public static final Setting<List<String>> LEGACY_DISCOVERY_HOSTS_PROVIDER_SETTING =
         Setting.listSetting("discovery.zen.hosts_provider", Collections.emptyList(), Function.identity(),
             Property.NodeScope, Property.Deprecated);
+    //discovery.seed_hosts 是 Elasticsearch 7.x 及更高版本 中用于集群节点发现的核心配置参数，替代了早期版本中的 discovery.zen.hosts_provider。以下是详细解析：
+    //作用
+    //功能：指定一组种子节点（Seed Hosts），新加入集群的节点通过这些种子节点发现集群中的其他节点（尤其是主节点）。
+    //核心目的：确保节点能快速、可靠地找到集群入口，完成分布式组网
+
+    //关键特性
+    //1、种子节点的作用：
+    //种子节点是集群中已知的稳定节点列表，新节点启动时会尝试连接这些种子节点，进而发现整个集群。
+    //种子节点本身可以是主节点（master-eligible）或数据节点，但通常建议配置为专用的主节点。
+    //2、动态发现：
+    //节点通过种子节点获取集群中其他节点的地址，无需手动维护所有节点的列表。
+    //支持动态更新，例如节点故障时自动剔除不可达节点。
+    //3、与 cluster.initial_master_nodes 的配合：
+    //在首次启动集群时，需同时配置 discovery.seed_hosts 和 cluster.initial_master_nodes，前者用于节点发现，后者用于选举初始主节点。
     public static final Setting<List<String>> DISCOVERY_SEED_PROVIDERS_SETTING =
         Setting.listSetting("discovery.seed_providers", Collections.emptyList(), Function.identity(),
             Property.NodeScope);

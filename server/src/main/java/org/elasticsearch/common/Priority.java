@@ -26,12 +26,12 @@ import java.io.IOException;
 
 public enum Priority {
 
-    IMMEDIATE((byte) 0),
-    URGENT((byte) 1),
-    HIGH((byte) 2),
-    NORMAL((byte) 3),
-    LOW((byte) 4),
-    LANGUID((byte) 5);
+    IMMEDIATE((byte) 0), // 立即的
+    URGENT((byte) 1), // 紧急的
+    HIGH((byte) 2), // 高优先级
+    NORMAL((byte) 3), // 普通
+    LOW((byte) 4), // 低优先级
+    LANGUID((byte) 5); //慵懒的
 
     public static Priority readFrom(StreamInput input) throws IOException {
         return fromByte(input.readByte());

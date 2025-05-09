@@ -493,8 +493,6 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
 
     /**
      * 候选人/主节点才会执行此函数：统计市民的投票，改变命运就在此刻
-     * @param joinRequest
-     * @param joinCallback
      */
     private void handleJoinRequest(JoinRequest joinRequest, JoinHelper.JoinCallback joinCallback) {
         // 注：这里收到的term已是+1
@@ -788,7 +786,7 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
 
     /**
      * es启动，Node初始化时，会显式调用discovery.startInitialJoin()进行拉票选举;
-     * @see https://www.cnblogs.com/shanml/p/16684887.html
+     *  https://www.cnblogs.com/shanml/p/16684887.html
      */
     @Override
     public void startInitialJoin() {
@@ -1288,6 +1286,12 @@ public class Coordinator extends AbstractLifecycleComponent implements Discovery
         protected void onFoundPeersUpdated() {
             synchronized (mutex) {
                 // 从peer中获取DiscoveryNode属性，只有与对方节点连接成功，DiscoveryNode属性才不为空
+
+                // 注：zen2 或者说 初版Raft算法，过半协议的阈值如何取值？
+                // 1、7.6版本前，过半的阈值直接写死：如discovery.zen.minimum_master_nodes=2
+                // 2、而7.6之后，读取discovery.seed_providers配置的主机，建立连接获取对方信息，并保留具备候选节点资格节点，然后通过候选节点列表来动态计算 过半阈值
+                // 两者对比：discovery.zen.minimum_master_nodes直接写死，如配错，脑裂风险高
+                // 通过discovery.seed_providers动态计算过半阈值，如此参数配错，也容易脑裂。此方法初衷是好，根据实际情况计算过半阈值，但还不成熟。只能说，Raft算法还不成熟吧
                 final Iterable<DiscoveryNode> foundPeers = getFoundPeers();
                 if (mode == Mode.CANDIDATE) {
                     // 收集投票，用于统计是否过半

@@ -96,9 +96,6 @@ public class TransportGetAction extends TransportSingleShardAction<GetRequest, G
 
     /**
      * 在当前分片读取数据逻辑
-     * @param request
-     * @param shardId
-     * @return
      */
     @Override
     protected GetResponse shardOperation(GetRequest request, ShardId shardId) {

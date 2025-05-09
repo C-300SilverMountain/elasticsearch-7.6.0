@@ -318,10 +318,6 @@ public class OperationRouting {
 
     /**
      * 实际上 ES 是通过文档 Id 或者 routing key 计算出到底要到哪个Shard 上获取数据的。
-     * @param indexMetaData
-     * @param effectiveRouting
-     * @param partitionOffset
-     * @return
      */
     private static int calculateScaledShardId(IndexMetaData indexMetaData, String effectiveRouting, int partitionOffset) {
         //根据一下代码，最终整理成公式如下：

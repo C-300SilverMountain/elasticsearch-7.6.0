@@ -58,6 +58,7 @@ public class NodeJoinController {
 
     // this is set while trying to become a master
     // mutation should be done under lock
+    // 代表单轮选举流程，一旦选举流程结束，electionContext会被清空
     private ElectionContext electionContext = null;
 
 
@@ -86,10 +87,13 @@ public class NodeJoinController {
      *                            object
      **/
     public void waitToBeElectedAsMaster(int requiredMasterJoins, TimeValue timeValue, final ElectionCallback callback) {
+        // 注意done.await配置了超时施加，也就是说，在指定时间内，没有触发done.countDown()，那么就当超时处理：发起重选举
         final CountDownLatch done = new CountDownLatch(1);
+        // 集群中任意一个节点已执行提交状态，都会触发ElectionCallback
         final ElectionCallback wrapperCallback = new ElectionCallback() {
             @Override
             public void onElectedAsMaster(ClusterState state) {
+                // 选举成功，唤醒发起选举的线程，继续执行
                 done.countDown();
                 //执行正式成为master节点要做的流程
                 callback.onElectedAsMaster(state);
@@ -97,6 +101,7 @@ public class NodeJoinController {
 
             @Override
             public void onFailure(Throwable t) {
+                // 选举失败，唤醒发起选举的线程，继续执行
                 done.countDown();
                 callback.onFailure(t);
             }
@@ -110,12 +115,16 @@ public class NodeJoinController {
             synchronized (this) {
                 assert electionContext != null : "waitToBeElectedAsMaster is called we are not accumulating joins";
                 myElectionContext = electionContext;
+                // requiredMasterJoins的值来源于：discovery.zen.minimum_master_nodes
+                // 此处将requiredMasterJoins的值保存到选举容器中，每一次选举容器都是新对象，选举完成后，就会清除选举容器
+                // 选举结果的callback：wrapperCallback
+                // 什么时候回调electionContext.wrapperCallback
                 electionContext.onAttemptToBeElected(requiredMasterJoins, wrapperCallback);
                 // 执行一次统计选票是否过半：因为投给本地节点的其他节点 可能先执行了选举流程且投给了本节点
                 checkPendingJoinsAndElectIfNeeded();
             }
 
-            //此处实际等待handleJoinRequest，收集到足够的选票后，触发wrapperCallback
+            //此处实际等待handleJoinRequest，收集到足够的选票，进入发布状态流程，当发布状态成功才会触发wrapperCallback，唤醒done.await
             try {
                 //等待投票：默认等待30s，失败则重新选举
                 if (done.await(timeValue.millis(), TimeUnit.MILLISECONDS)) {
@@ -189,6 +198,7 @@ public class NodeJoinController {
             electionContext.addIncomingJoin(node, callback);
             checkPendingJoinsAndElectIfNeeded();
         } else {
+            // 什么时候会触发此处：当集群已选出主节点，electionContext就会被清除，后续再有新节点申请加入集群，此类情况就会触发这行代码
             masterService.submitStateUpdateTask("zen-disco-node-join",
                 new JoinTaskExecutor.Task(node, "no election context"), ClusterStateTaskConfig.build(Priority.URGENT),
                 joinTaskExecutor, new JoinTaskListener(callback, logger));
@@ -219,7 +229,7 @@ public class NodeJoinController {
             // 当前节点成为“主节点”，并发布（广播）集群状态 & 定期发送ping到集群中所有其他节点
             // 依赖ZenDiscovery.publish广播集群状态，其实就是通知其他节点，本节点已成为“大佬”
             electionContext.closeAndBecomeMaster();
-            // 清空选举容器，防止后续再次选举的时候导致累加
+            // 清空选举容器，表示此轮选举结束，防止后续再次选举的时候导致累加
             // 变空后，failContextIfNeeded就不会执行，也就不会再发起一次选举
             electionContext = null; // clear this out so future joins won't be accumulated
         }
@@ -261,6 +271,8 @@ public class NodeJoinController {
 
 
         public synchronized boolean isEnoughPendingJoins(int pendingMasterJoins) {
+            // pendingMasterJoins的值来源于：discovery.zen.minimum_master_nodes（写死的），一旦配错，引发脑裂。如配置成discovery.zen.minimum_master_nodes=1
+            //
             final boolean hasEnough;
             if (requiredMasterJoins < 0) {
                 // requiredMasterNodes is unknown yet, return false and keep on waiting
@@ -302,10 +314,14 @@ public class NodeJoinController {
             final String source = "zen-disco-elected-as-master ([" + tasks.size() + "] nodes joined)";
 
             // noop listener, the election finished listener determines result
+            // Task的执行结果，会通知到Listener。也就是说，先执行Task,然后将Task的执行结果通知到Listener
             tasks.put(JoinTaskExecutor.newBecomeMasterTask(), (source1, e) -> {
             });
             tasks.put(JoinTaskExecutor.newFinishElectionTask(), electionFinishedListener);
             //MasterService主要负责集群任务管理和运行，只有主节点会提交集群任务到内部队列，并运行队列中的任务
+            // masterService.submitStateUpdateTasks属于模板模式：
+            // 1、执行joinTaskExecutor.execute得到集群状态（新或旧）， masterService.submitStateUpdateTasks通过判断前后状态值是否变化，进而触发状态发布流程
+            // 2、masterService.submitStateUpdateTasks内部并没有实现发布状态流程，而是委托ZenDiscovery.publish或Coordinator.publish实现二阶段发布集群状态
             masterService.submitStateUpdateTasks(source, tasks, ClusterStateTaskConfig.build(Priority.URGENT), joinTaskExecutor);
         }
 
@@ -357,6 +373,7 @@ public class NodeJoinController {
             public void clusterStateProcessed(String source, ClusterState oldState, ClusterState newState) {
                 if (newState.nodes().isLocalNodeElectedMaster()) {
                     // 通知本地选自己而等待的线程：继续执行
+                    // 什么时候回调electionContext.wrapperCallback? 答案是此处
                     ElectionContext.this.onElectedAsMaster(newState);
                 } else {
                     onFailure(source, new NotMasterException("election stopped [" + source + "]"));

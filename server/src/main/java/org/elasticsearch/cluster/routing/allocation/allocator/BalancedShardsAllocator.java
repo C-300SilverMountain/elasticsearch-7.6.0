@@ -92,9 +92,9 @@ import static org.elasticsearch.cluster.routing.ShardRoutingState.RELOCATING;
 
  * 1、Es 中有以下几个类型的 allocator:
  * Allocator: Allocator 负责为某个特定的 shard 分配目的节点。每个Allocator的主要工作是根据某种逻辑得到一个节点列表，然后调用 deciders 去决策，根据决策结果选择一个目的 node。
- *             -->ShardsAllocator -> BalancedShardsAllocator
+ *             --》ShardsAllocator -》 BalancedShardsAllocator
  * Allocator --
- *             -->gatewayAllocator -> PrimaryShardAllocator,ReplicaShardAllocator
+ *             --》gatewayAllocator -》 PrimaryShardAllocator,ReplicaShardAllocator
  * 可见，Allocators 分为 gatewayAllocator 和 shardsAllocator 两种。
  * gatewayAllocator 是为了找到现有分片，shardsAllocator 是根据权重策略在集群的各节点间均衡分片分布。
  * 其中 gatewayAllocator 又分主分片和副分片的 allocator。
