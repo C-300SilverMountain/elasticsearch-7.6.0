@@ -901,6 +901,7 @@ public class Node implements Closeable {
         clusterService.getMasterService().setClusterStatePublisher(discovery::publish);
 
         // Start the transport service now so the publish address will be added to the local disco node in ClusterService
+        //启动对内暴露端口，监听节点间请求。TransportService不仅负责发送，且负责接收请求。
         //tcp port:9300，监听节点之间请求
         TransportService transportService = injector.getInstance(TransportService.class); // 负责节点间通讯。
         transportService.getTaskManager().setTaskResultsService(injector.getInstance(TaskResultsService.class));
@@ -998,6 +999,7 @@ public class Node implements Closeable {
                 }
             }
         }
+        //启动对外暴露端口，接收用户请求
         //提供 REST 接口服务。开启 HttpServerTransport，并且绑定监听地址，接收 REST 请求，（即用户请求）
         //实际执行以下两个类之一：Netty4HttpServerTransport 或 SecurityNetty4HttpServerTransport
         //真正处理用户请求的类：Netty4HttpRequestHandler
