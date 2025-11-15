@@ -542,7 +542,7 @@ public class Node implements Closeable {
                 settingsModule.getIndexScopedSettings(), settingsModule.getClusterSettings(), settingsModule.getSettingsFilter(),
                 threadPool, pluginsService.filterPlugins(ActionPlugin.class), client, circuitBreakerService, usageService, clusterService);
             modules.add(actionModule);
-
+            //RestController实例是单一的
             //请求总分发器：处理请求的类名以Action结尾：如 *Action，这些类都会注册到RestController，key为路径，value为*Action；
             final RestController restController = actionModule.getRestController();
             // 从插件中加载网络服务
@@ -581,7 +581,7 @@ public class Node implements Closeable {
             final MetaDataIndexUpgradeService metaDataIndexUpgradeService = new MetaDataIndexUpgradeService(settings, xContentRegistry,
                 indicesModule.getMapperRegistry(), settingsModule.getIndexScopedSettings());
             new TemplateUpgradeService(client, clusterService, threadPool, indexTemplateMetaDataUpgraders);
-            //集群中节点之间的 传输对象
+            //对内暴露端口：用于集群中节点之间的 传输对象
             //同时调用下列方法，从集合中获取 TCP的处理类：
 
             //传输模块用于集群内节点之间的内部通信。从一个节点到另一个节
@@ -609,7 +609,8 @@ public class Node implements Closeable {
             // 搜索传输服务
             final SearchTransportService searchTransportService =  new SearchTransportService(transportService,
                 SearchExecutionStatsCollector.makeWrapper(responseCollectorService));
-            //初始化服务端，监听端口，接收此端口的请求
+            //对外暴露端口：用于接受用户请求
+            // 初始化服务端，监听端口，接收此端口的请求
             //es通信部分详解：https://blog.csdn.net/qq_34448345/article/details/128944565
             //同时调用下列方法，从集合中获取 HTTP的处理类：
             //HTTP
